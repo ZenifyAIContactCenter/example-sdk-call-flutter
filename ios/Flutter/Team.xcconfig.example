@@ -1,0 +1,2 @@
+// Chép thành Team.xcconfig rồi điền Team ID Apple Developer của bạn (developer.apple.com → Membership)
+DEVELOPMENT_TEAM = XXXXXXXXXX

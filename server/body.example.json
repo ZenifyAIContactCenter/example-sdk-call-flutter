@@ -1,0 +1,14 @@
+{
+  "token": "<voip_push_token | fcm_token>",
+  "os": "ios",
+  "is_apn_prod": true,
+  "payload": {
+    "type": "CALL_IN",
+    "tenant_id": "<tenant_id>",
+    "agent_id": "<agent_id>",
+    "phone_number": "0900000000",
+    "uuid": "60902fa9-1e88-4c14-bb65-fb6c3e3a6a79",
+    "call_id": "20260628004903-CUCEKDYB-2012",
+    "callerName": "Khách hàng"
+  }
+}

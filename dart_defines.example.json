@@ -1,0 +1,7 @@
+{
+  "ZC_EMAIL": "<email agent>",
+  "ZC_API_KEY": "<API key — không commit>",
+  "ZC_AUTO": "false",
+  "ZC_DEMO_PHONE": "<số gọi thử ở màn CRM / Gọi thủ công>",
+  "ZC_DEMO_CUSTOMERS": "[{\"name\":\"Nguyễn Văn A\",\"phone\":\"0900000000\",\"tag\":\"Ưu tiên\",\"note\":\"…\",\"history\":\"…\"}]"
+}

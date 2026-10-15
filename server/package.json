@@ -1,0 +1,21 @@
+{
+  "name": "zenify-push-tester",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Server mẫu bắn push cuộc gọi (APNs VoIP + FCM) cho app dùng zenify_call",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node --watch server.mjs",
+    "webhook": "node webhook.mjs",
+    "health": "curl -s localhost:${PORT:-3000}/health",
+    "post": "curl -s -X POST localhost:${PORT:-3000}/push -H 'content-type: application/json' -d @body.json",
+    "apns": "node push.mjs apns",
+    "apns:sandbox": "node push.mjs apns --sandbox",
+    "fcm": "node push.mjs fcm",
+    "fcm:ios": "node push.mjs fcm --platform ios"
+  }
+}

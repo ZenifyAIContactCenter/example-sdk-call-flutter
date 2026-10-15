@@ -1,0 +1,7 @@
+# bí mật: .env, key APNs, service account Firebase — KHÔNG commit
+.env
+# body thật (token của máy) — chép từ body.example.json
+body.json
+secrets/
+node_modules/
+!.env.example

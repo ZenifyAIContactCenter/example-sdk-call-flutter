@@ -1,0 +1,8 @@
+#include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"
+#include "Generated.xcconfig"
+
+// zenify_call: PJSIP.xcframework chỉ có simulator arm64 → bỏ x86_64 (đặt SAU Generated.xcconfig vì file đó ghi đè)
+EXCLUDED_ARCHS[sdk=iphonesimulator*]=i386 x86_64
+
+// Team ký app: ios/Flutter/Team.xcconfig (không commit — chép từ Team.xcconfig.example)
+#include? "Team.xcconfig"

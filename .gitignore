@@ -1,0 +1,71 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# Widget Preview related
+.widget_preview/
+
+# ---- Bí mật / cấu hình máy: KHÔNG commit ----
+# email / API key / mật khẩu SIP tạm để chạy demo
+dart_defines.local.json
+# Firebase iOS (sinh lib/firebase_options.dart bằng tool/gen_firebase_options.py)
+ios/Runner/GoogleService-Info.plist
+lib/firebase_options.dart
+**/sip_credentials*.json
+.env
+.env.*
+!.env.example
+# trỏ zenify_call về bản SDK ở máy (dependency_overrides)
+pubspec_overrides.yaml
+# Xcode tự sinh khi bật SPM — app dùng CocoaPods
+ios/Runner.xcworkspace/xcshareddata/swiftpm/
+# log đóng gói .ipa Xcode tự sinh
+ios/Runner 20*/
+# Team ID ký app iOS (chép từ ios/Flutter/Team.xcconfig.example)
+ios/Flutter/Team.xcconfig
+# Repo public: Firebase của bạn + ghi chú / dữ liệu test nội bộ không commit
+android/app/google-services.json
+INTERNAL.md
+dart_defines.internal.json
