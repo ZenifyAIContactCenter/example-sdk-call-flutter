@@ -1,4 +1,4 @@
-name: call_flutter_example
+name: example_call_flutter
 description: "App demo dùng package zenify_call (pub.dev): đăng nhập, gọi ra, nhận cuộc gọi, push VoIP / FCM."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.

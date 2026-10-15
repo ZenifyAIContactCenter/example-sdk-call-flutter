@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zenify_call/zenify_call.dart';
-import 'package:call_flutter_example/main.dart' show customDial;
+import 'package:example_call_flutter/main.dart' show customDial;
 
 void main() {
   testWidgets('bản tuỳ biến: header trắng, phím nền tối', (t) async {

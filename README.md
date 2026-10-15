@@ -1,4 +1,4 @@
-# call-flutter-example
+# example-call-flutter
 
 App Flutter demo dùng SDK gọi điện [`zenify_call`](https://pub.dev/packages/zenify_call) **từ pub.dev**:
 đăng nhập bằng email + API key, nhận / gọi cuộc gọi qua PJSIP, nhận push VoIP / FCM khi app ở nền
