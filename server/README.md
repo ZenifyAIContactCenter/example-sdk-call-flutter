@@ -112,6 +112,9 @@ Server đọc trường `os` của event: `ios` → APNs VoIP, `android` → FCM
 
 ## Webhook qua webhook.site (chưa có URL công khai)
 
+Dùng được webhook.site hoặc bản tự host cùng API (`GET /token/<uuid>/requests`): script đọc API ở
+đúng host của `WEBHOOK_URL`.
+
 Server Zenify POST event cuộc gọi tới URL webhook.site. `npm run webhook` đọc request **mới** qua API
 webhook.site (2 giây / lần, không cần mở cổng ra Internet) rồi bắn push theo trường `os`:
 
@@ -129,7 +132,17 @@ Body event giống `POST /push`:
 
 - Event thiếu `payload.type` → tự thêm `"type": "CALL_IN"` (app chỉ đổ chuông khi có `type`).
 - Request không phải JSON / thiếu `token` hoặc `payload` → bỏ qua, có log.
-- Mở lên chỉ xử lý request tới **sau** khi chạy; `-- --replay` bắn lại cả request đã có.
+- Event cũ **không** bắn lại:
+  - request tạo **trước** lúc chạy script, so theo `created_at` nên vẫn đúng khi lần đọc đầu lỗi
+    (`-- --replay` để bắn lại cả request đã có);
+  - request cũ hơn `WEBHOOK_MAX_AGE` giây (mặc định 60, `0` = không giới hạn; hoặc `-- --max-age`).
+    Vd mạng lỗi vài phút rồi đọc bù: cuộc gọi đã qua, không đổ chuông nữa;
+  - event **lặp**: cùng `call_id` + `token` và cùng `type` với lần bắn trước của cuộc đó, trong
+    `DEDUPE_SECONDS` (mặc định 600). Zenify quay số nhiều vòng với cùng `call_id`
+    (`CALL_IN` → `CALL_CANCEL` → `CALL_IN` → `CALL_CANCEL`): mỗi lần đổi `type` vẫn bắn. Áp dụng cả
+    `POST /push` (trả `{"ok": true, "skipped": "duplicate"}`). Bắn lỗi thì không tính, gửi lại được.
+- `-- --dry-run`: chỉ in event sẽ bắn, không gửi push (kiểm tra trước khi chạy thật).
+- Chỉ chạy **một** `npm run webhook` cho mỗi URL: hai tiến trình cùng đọc thì mỗi event bị bắn hai lần.
 
 ```sh
 # .env: WEBHOOK_URL=https://webhook.site/<uuid>

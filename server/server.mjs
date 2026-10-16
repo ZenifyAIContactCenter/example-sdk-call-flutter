@@ -6,7 +6,7 @@
 // Thêm "channel": "fcm" khi os=ios để gửi push im lặng qua FCM (CALL_CANCEL).
 import crypto from 'node:crypto';
 import http from 'node:http';
-import { handlePush } from './lib.mjs';
+import { alreadyFired, forgetFired, handlePush } from './lib.mjs';
 
 const PORT = Number(process.env.PORT || 3000);
 // Mặc định chỉ nghe trên máy này: server cầm key APNs, không mở ra mạng ngoài
@@ -44,7 +44,16 @@ http
       if (req.method === 'GET' && req.url === '/health') return reply(res, 200, { ok: true });
       if (req.method !== 'POST' || req.url !== '/push') return reply(res, 404, { error: 'chỉ có POST /push' });
       if (!authorized(req)) return reply(res, 401, { error: 'sai Authen Key' });
-      const [status, out] = await handlePush(await readJson(req));
+      const body = await readJson(req);
+      if (alreadyFired(body)) {
+        console.log(`bỏ qua event trùng: ${body.payload.type ?? 'CALL_IN'} call=${body.payload.call_id}`);
+        return reply(res, 200, { ok: true, skipped: 'duplicate' });
+      }
+      const [status, out] = await handlePush(body).catch((e) => {
+        forgetFired(body);
+        throw e;
+      });
+      if (status !== 200) forgetFired(body);
       reply(res, status, out);
     } catch (e) {
       console.error('LỖI:', e.message);

@@ -148,6 +148,36 @@ export function payloadWarning(payload) {
 
 // ---------------- Body POST /push / event webhook ----------------
 
+// Event đã bắn gần nhất của mỗi `call_id:token` → { type, at }. Server Zenify quay số nhiều vòng
+// với CÙNG call_id: CALL_IN → CALL_CANCEL → CALL_IN (vòng 2) → CALL_CANCEL… → mỗi lần ĐỔI type là
+// một bước mới, phải bắn. Chỉ bỏ event LẶP (cùng type với lần bắn trước của cuộc đó — Zenify gửi
+// lại / relay chạy trùng), để máy không nhận push thừa.
+const DEDUPE_MS = Number(env('DEDUPE_SECONDS', '600')) * 1000;
+const fired = new Map();
+const keyOf = (body) => `${body?.payload?.call_id}:${body?.token}`;
+const typeOf = (body) => body?.payload?.type ?? 'CALL_IN';
+
+/** `true` nếu cuộc này (call_id + token) vừa bắn đúng type này rồi (trong DEDUPE_SECONDS, mặc định 600). */
+export function alreadyFired(body) {
+  if (!body?.payload?.call_id || !body.token || !(DEDUPE_MS > 0)) return false;
+  const now = Date.now();
+  for (const [k, v] of fired) if (now - v.at > DEDUPE_MS) fired.delete(k);
+  const key = keyOf(body);
+  const last = fired.get(key);
+  if (last?.type === typeOf(body)) return true;
+  fired.set(key, { type: typeOf(body), at: now, prev: last });
+  return false;
+}
+
+/** Bắn lỗi → trả về trạng thái trước, để lần gửi lại (Zenify retry) vẫn được bắn. */
+export function forgetFired(body) {
+  const key = keyOf(body);
+  const cur = fired.get(key);
+  if (cur?.type !== typeOf(body)) return;
+  if (cur.prev) fired.set(key, cur.prev);
+  else fired.delete(key);
+}
+
 /**
  * Body `{ token, os: ios|android, is_apn_prod?, payload, channel?: 'fcm' }` (giống event server
  * Zenify) → APNs VoIP (ios) / FCM (android). Dùng chung cho server.mjs và webhook.mjs.
