@@ -12,7 +12,7 @@ bắn push cuộc gọi (APNs VoIP cho iOS, FCM cho Android) đúng payload SDK 
 | Thư mục | Nội dung |
 | --- | --- |
 | `lib/` | App demo (`main.dart`: luồng đăng nhập → gọi; `demo_home.dart`: tab CRM / Gọi) |
-| `server/` | Server push mẫu (Node.js ≥ 18, không cần `npm install`) |
+| `server/` | Server push mẫu (Node.js ≥ 18, không cần `npm install`; chạy được bằng Docker) |
 | `docs/images/` | Ảnh hướng dẫn: webhook trên web Zenify, key APNs, Firebase |
 | `tool/` | `bump_version.sh`, `gen_firebase_options.py` |
 
@@ -80,6 +80,34 @@ flutter run --profile --dart-define-from-file=dart_defines.local.json  # profile
 > **Test cuộc gọi đến / push: dùng profile hoặc release.** Từ iOS 14, bản debug không chạy được khi
 > không gắn với `flutter run` / Xcode. Push đánh thức app trong nền thì app chết, server đổi
 > `phone_type` về 0, nên chỉ nhận được cuộc gọi đầu.
+
+## Chạy server push mẫu bằng Docker
+
+Không cần cài Node trên máy chủ. Bí mật (`.env`, key APNs `.p8`, service account Firebase) **không**
+nằm trong image: truyền lúc chạy.
+
+```sh
+cd server
+cp .env.example .env                       # điền APN_*, FCM_*, WEBHOOK_URL / WEBHOOK_AUTH_KEY
+mkdir -p secrets && cp AuthKey_XXXXXXXXXX.p8 firebase-service-account.json secrets/
+# trong .env dùng đường dẫn TRONG container:
+#   APN_KEY_FILE=/secrets/AuthKey_XXXXXXXXXX.p8
+#   FCM_SERVICE_ACCOUNT_FILE=/secrets/firebase-service-account.json
+
+docker compose up -d --build push          # POST /push (cổng 3000) — web Zenify gọi tới
+# hoặc: docker compose up -d --build webhook  # đọc event từ WEBHOOK_URL, không mở cổng
+docker compose logs -f                     # xem kết quả bắn push
+curl -s localhost:3000/health              # {"ok": true}
+docker compose down                        # dừng
+```
+
+- Chọn **một** trong hai service: web Zenify gọi được URL công khai → `push`; chưa có → `webhook`.
+  Đừng chạy cả hai cho cùng một nguồn event: mỗi service chống bắn trùng riêng, chạy cả hai thì máy
+  nhận push 2 lần.
+- Cổng 3000 chỉ mở trên `127.0.0.1` của máy chủ. Mở ra Internet thì đặt sau reverse proxy HTTPS và
+  **bắt buộc** đặt `WEBHOOK_AUTH_KEY` — server cầm key APNs / FCM.
+- Chạy bằng `docker run`, các biến môi trường và cách bắn thử: xem
+  [`server/README.md`](server/README.md#chạy-bằng-docker).
 
 ## Đổi version (1.0.x)
 

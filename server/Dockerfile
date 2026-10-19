@@ -1,0 +1,24 @@
+# Server push mẫu (APNs VoIP + FCM) — không có dependency npm, chỉ cần Node.
+# Node ≥ 20.12: lib.mjs dùng process.loadEnvFile.
+#
+# KHÔNG đưa bí mật vào image (.env, key .p8, service account — .dockerignore đã chặn):
+# truyền biến bằng --env-file và mount key vào /secrets lúc chạy. Xem README "Chạy bằng Docker".
+FROM node:22-alpine
+
+WORKDIR /app
+COPY package.json *.mjs ./
+
+ENV NODE_ENV=production \
+    # trong container phải nghe 0.0.0.0 mới publish cổng ra ngoài được (server.mjs mặc định
+    # 127.0.0.1). Chỉ publish ra máy chủ: -p 127.0.0.1:3000:3000
+    HOST=0.0.0.0 \
+    PORT=3000
+
+USER node
+EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s \
+  CMD wget -qO- "http://127.0.0.1:${PORT}/health" >/dev/null || exit 1
+
+# Mặc định: POST /push. Nghe webhook: `docker run … zenify-push node webhook.mjs`
+CMD ["node", "server.mjs"]

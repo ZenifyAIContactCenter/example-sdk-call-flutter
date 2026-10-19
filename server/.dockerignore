@@ -1,0 +1,10 @@
+# bí mật KHÔNG được vào image
+.env
+secrets/
+*.p8
+*service-account*.json
+body.json
+node_modules/
+Dockerfile
+docker-compose.yml
+.dockerignore

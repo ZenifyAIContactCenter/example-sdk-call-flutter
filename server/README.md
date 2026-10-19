@@ -150,6 +150,40 @@ npm run webhook
 npm run webhook -- --url https://webhook.site/<uuid> --interval 1
 ```
 
+## Chạy bằng Docker
+
+Image chỉ chứa code (Node 22, không cần `npm install`). Bí mật **không** nằm trong image
+(`.dockerignore` chặn `.env`, `secrets/`, `*.p8`): biến truyền qua `--env-file`, key mount vào
+`/secrets` lúc chạy.
+
+```sh
+mkdir -p secrets && cp AuthKey_XXXXXXXXXX.p8 firebase-service-account.json secrets/
+# trong .env trỏ đường dẫn TRONG container:
+#   APN_KEY_FILE=/secrets/AuthKey_XXXXXXXXXX.p8
+#   FCM_SERVICE_ACCOUNT_FILE=/secrets/firebase-service-account.json
+
+docker compose up -d --build push   # POST /push, cổng 3000 — web Zenify gọi tới
+# hoặc: docker compose up -d --build webhook   # đọc WEBHOOK_URL, không mở cổng
+docker compose logs -f              # xem kết quả bắn push
+curl -s localhost:3000/health
+```
+
+Không dùng compose:
+
+```sh
+docker build -t zenify-push .
+docker run -d --name zenify-push --env-file .env -v "$PWD/secrets:/secrets:ro" \
+  -p 127.0.0.1:3000:3000 zenify-push                     # POST /push
+docker run -d --name zenify-webhook --env-file .env -v "$PWD/secrets:/secrets:ro" \
+  zenify-push node webhook.mjs                           # đọc webhook, không mở cổng
+```
+
+* Container nghe `0.0.0.0` (đặt sẵn `HOST`), cổng chỉ publish ra `127.0.0.1` của máy chủ. Mở ra
+  Internet thì đặt sau reverse proxy HTTPS và **bắt buộc** đặt `WEBHOOK_AUTH_KEY` — server cầm key
+  APNs / FCM.
+* Chọn **một** trong hai service: web Zenify gọi được URL công khai → `push`; chưa có → `webhook`.
+  Chạy cả hai cho cùng nguồn event thì máy nhận push 2 lần (mỗi service chống trùng riêng).
+
 ## Lấy token
 
 - **VoIP (iOS):** `voip_push_token` của agent (`GET /v2/me/agent-status` không có, xem `info.voip_push_token` lúc đăng nhập), hoặc đọc từ app.
