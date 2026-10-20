@@ -1,11 +1,10 @@
-# bí mật KHÔNG được vào image
+# bí mật KHÔNG được vào image — trừ keys/ (Dockerfile chép vào /app/keys)
 .env
 secrets/
 *.p8
 *service-account*.json
 body.json
 data/
-keys/
 node_modules/
 Dockerfile
 docker-compose.yml

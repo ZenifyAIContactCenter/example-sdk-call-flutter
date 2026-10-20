@@ -14,12 +14,12 @@ const b64url = (buf) => Buffer.from(buf).toString('base64url');
 export const short = (t) => `${String(t).slice(0, 8)}…${String(t).slice(-6)}`;
 
 /**
- * Thư mục key: thả file vào đây là xong, không cần khai đường dẫn trong .env.
+ * Key LUÔN đọc từ thư mục `server/keys/` (Docker: chép vào image tại `/app/keys`). Thả file vào là xong:
  *   · APNs: `AuthKey_<KeyID>.p8` (Key ID lấy luôn từ tên file nếu không đặt APN_KEY_ID)
  *   · FCM : file JSON service account Firebase (`"type": "service_account"`), tên tuỳ ý
- * Mặc định `server/keys/` (Docker: `./keys` mount vào `/app/keys`, chỉ đọc). Đổi: KEYS_DIR.
+ * Không còn khai đường dẫn key trong .env — tránh .env cũ trỏ sai chỗ.
  */
-export const KEYS_DIR = path.resolve(DIR, process.env.KEYS_DIR || 'keys');
+export const KEYS_DIR = path.join(DIR, 'keys');
 
 function listKeys(ext) {
   try {
@@ -41,14 +41,12 @@ const isServiceAccount = (p) => {
   }
 };
 
-/**
- * Đường dẫn file key. Ưu tiên biến môi trường (tương đối → tính theo thư mục server/, không theo
- * thư mục đang đứng khi chạy lệnh); không đặt → tự tìm trong KEYS_DIR. Trả '' nếu không có.
- */
+const findKeys = (name) =>
+  name === 'APN_KEY_FILE' ? listKeys('.p8') : listKeys('.json').filter(isServiceAccount);
+
+/** Đường dẫn file key trong KEYS_DIR (phải có đúng MỘT file mỗi loại). Trả '' nếu không có. */
 export function keyPath(name) {
-  const v = process.env[name];
-  if (v) return path.resolve(DIR, v);
-  const found = name === 'APN_KEY_FILE' ? listKeys('.p8') : listKeys('.json').filter(isServiceAccount);
+  const found = findKeys(name);
   return found.length === 1 ? found[0] : '';
 }
 
@@ -58,23 +56,28 @@ export function apnKeyId() {
   return /AuthKey_([A-Z0-9]{10})\.p8$/i.exec(keyPath('APN_KEY_FILE'))?.[1]?.toUpperCase() ?? '';
 }
 
-/** Kiểm tra key lúc khởi động → báo rõ (thiếu / thừa / là thư mục) thay vì lỗi ở lần bắn đầu tiên. */
+/** Kiểm tra key lúc khởi động → báo rõ (thiếu / thừa / không đọc được) thay vì lỗi ở lần bắn đầu tiên. */
 export function checkKeyFiles() {
   const out = [];
   for (const name of ['APN_KEY_FILE', 'FCM_SERVICE_ACCOUNT_FILE']) {
     const what = name === 'APN_KEY_FILE' ? 'key APNs .p8 (iOS)' : 'service account Firebase .json (Android)';
-    if (!process.env[name]) {
-      const n = name === 'APN_KEY_FILE' ? listKeys('.p8').length : listKeys('.json').filter(isServiceAccount).length;
-      if (n === 0) out.push(`chưa có ${what} trong ${KEYS_DIR} — thả file vào đó (hoặc đặt ${name})`);
-      else if (n > 1) out.push(`có ${n} file ${what} trong ${KEYS_DIR} — chỉ để MỘT, hoặc đặt ${name} chỉ rõ file`);
-      continue;
-    }
-    const p = keyPath(name);
-    if (!fs.existsSync(p)) out.push(`${name}: KHÔNG có file ${p} — chép file vào đó hoặc sửa .env`);
-    else if (fs.statSync(p).isDirectory()) out.push(`${name}: ${p} là THƯ MỤC, không phải file — sửa .env thành đường dẫn file thật`);
+    const n = findKeys(name).length;
+    if (n === 0) out.push(`chưa có ${what} trong ${KEYS_DIR} — thả file vào đó`);
+    else if (n > 1) out.push(`có ${n} file ${what} trong ${KEYS_DIR} — chỉ để MỘT`);
   }
-  if (keyPath('APN_KEY_FILE') && !apnKeyId()) out.push('không biết Key ID APNs — đặt tên file AuthKey_<KeyID>.p8 hoặc đặt APN_KEY_ID');
-  if (keyPath('APN_KEY_FILE') && !process.env.APN_TEAM_ID) out.push('thiếu APN_TEAM_ID trong .env (không bắn được iOS)');
+  // .p8 không parse được nội dung để lọc như JSON → kiểm tra quyền đọc riêng
+  const p8 = keyPath('APN_KEY_FILE');
+  if (p8) {
+    try {
+      fs.accessSync(p8, fs.constants.R_OK);
+    } catch {
+      out.push(`không đọc được ${p8} (quyền file) — chown/chmod cho user đang chạy server`);
+    }
+  }
+  if (process.env.APN_KEY_FILE || process.env.FCM_SERVICE_ACCOUNT_FILE)
+    out.push('APN_KEY_FILE / FCM_SERVICE_ACCOUNT_FILE trong .env bị BỎ QUA — key chỉ đọc từ thư mục keys/');
+  if (p8 && !apnKeyId()) out.push('không biết Key ID APNs — đặt tên file AuthKey_<KeyID>.p8 hoặc đặt APN_KEY_ID');
+  if (p8 && !process.env.APN_TEAM_ID) out.push('thiếu APN_TEAM_ID trong .env (không bắn được iOS)');
   return out;
 }
 
@@ -117,7 +120,7 @@ function apnsJwt() {
  * @returns {{status:number, apnsId:string, body:string, host:string}}
  */
 export function sendApnsVoip({ token, payload, production = apnsDefaultProduction() }) {
-  if (!keyPath('APN_KEY_FILE')) throw new Error(`Chưa có key APNs .p8 — thả vào ${KEYS_DIR} hoặc đặt APN_KEY_FILE`);
+  if (!keyPath('APN_KEY_FILE')) throw new Error(`Chưa có key APNs .p8 — thả MỘT file vào ${KEYS_DIR}`);
   if (!apnKeyId()) throw new Error('Không biết Key ID APNs — tên file AuthKey_<KeyID>.p8 hoặc đặt APN_KEY_ID');
   requireEnv('APN_TEAM_ID');
   const host = production ? 'https://api.push.apple.com' : 'https://api.sandbox.push.apple.com';
@@ -156,7 +159,7 @@ export function sendApnsVoip({ token, payload, production = apnsDefaultProductio
 let fcmCache = { token: '', exp: 0, sa: null };
 async function fcmAuth() {
   if (!keyPath('FCM_SERVICE_ACCOUNT_FILE')) {
-    throw new Error(`Chưa có service account Firebase .json — thả vào ${KEYS_DIR} hoặc đặt FCM_SERVICE_ACCOUNT_FILE`);
+    throw new Error(`Chưa có service account Firebase .json — thả MỘT file vào ${KEYS_DIR}`);
   }
   const now = Math.floor(Date.now() / 1000);
   if (fcmCache.token && now < fcmCache.exp - 60) return fcmCache;

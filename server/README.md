@@ -27,11 +27,12 @@ Log lúc khởi động in key đang dùng (`key APNs: AuthKey_….p8 · Firebas
 | Biến | Ý nghĩa |
 | --- | --- |
 | `APN_TEAM_ID` | Team ID Apple Developer (10 ký tự) — **bắt buộc** cho iOS |
-| `APN_KEY_FILE` / `APN_KEY_ID` | Tuỳ chọn: trỏ file `.p8` ở chỗ khác `keys/` / Key ID nếu tên file không phải `AuthKey_<KeyID>.p8` |
+| `APN_KEY_ID` | Tuỳ chọn: Key ID nếu tên file không phải `AuthKey_<KeyID>.p8` |
 | `APN_BUNDLE_ID` | Bundle id app (mặc định `com.example.sdk.zenify` của app demo; topic VoIP = bundle + `.voip`) |
 | `APN_PRODUCTION` | `true` (mặc định): Ad Hoc / TestFlight. `false`: bản chạy từ Xcode. `--sandbox` ghi đè |
-| `FCM_SERVICE_ACCOUNT_FILE` | Tuỳ chọn: trỏ file service account JSON ở chỗ khác `keys/` |
-| `KEYS_DIR` | Tuỳ chọn: đổi thư mục key (mặc định `server/keys/`) |
+
+Key **chỉ** đọc từ `server/keys/` — không có biến trỏ đường dẫn key (`APN_KEY_FILE` /
+`FCM_SERVICE_ACCOUNT_FILE` cũ trong `.env` bị bỏ qua, log có cảnh báo).
 
 `.env`, `keys/*` và `secrets/` đã nằm trong `.gitignore` — **không commit key**.
 
@@ -286,14 +287,14 @@ Xem các request vừa gửi + kết quả bắn push: mở `http://localhost:30
 | `skipped: "duplicate"` | Event lặp đã bắn thành công trước đó (gửi lỗi thì không tính, gửi lại được) |
 | `apns_status` / `fcm_status` khác 200 | Xem "Đọc kết quả APNs" bên dưới |
 
-Docker chỉ thêm phần build image, đọc `.env` qua `env_file` và mount 2 file key — test bằng mục
+Docker chỉ thêm phần build image (chép `keys/` vào image), đọc `.env` qua `env_file` — test bằng mục
 dưới khi máy có Docker (macOS: Docker Desktop, hoặc `brew install colima docker docker-compose && colima start`).
 
 ## Chạy bằng Docker
 
-Image chỉ chứa code (Node 22, không cần `npm install`). Bí mật **không** nằm trong image
-(`.dockerignore` chặn `.env`, `keys/`, `*.p8`): biến truyền qua `.env`, thư mục `keys/` được mount
-vào container (chỉ đọc) lúc chạy.
+Image chứa code (Node 22, không cần `npm install`) + thư mục `keys/` được **chép vào** `/app/keys`
+lúc build (chown `node`, chỉ đọc — file trên máy chủ là root/600 vẫn được). Vì image có key: chỉ build
+trên máy chủ, **không push image lên registry**. `.env` không vào image, truyền qua `env_file`.
 
 ```sh
 cp AuthKey_XXXXXXXXXX.p8 <project>-firebase-adminsdk-….json keys/   # thả 2 file key vào keys/
@@ -312,14 +313,14 @@ Không dùng compose:
 
 ```sh
 docker build -t zenify-push .
-docker run -d --name zenify-push --env-file .env -e APN_KEY_FILE= -e FCM_SERVICE_ACCOUNT_FILE= \
-  -v "$PWD/keys:/app/keys:ro" -v zenify-push-data:/app/data -p 127.0.0.1:3000:3000 zenify-push
+docker run -d --name zenify-push --env-file .env \
+  -v zenify-push-data:/app/data -p 127.0.0.1:3000:3000 zenify-push
 ```
 
-Docker **bỏ qua** `APN_KEY_FILE` / `FCM_SERVICE_ACCOUNT_FILE` trong `.env` và chỉ đọc `keys/` — nên
-lỗi kiểu `ENOENT … AuthKey_….p8` / `EISDIR` của bản cũ không còn. Thiếu file thì log báo
+Key chỉ đọc từ `/app/keys` (chép từ `server/keys/` lúc build) — nên lỗi kiểu
+`KHÔNG có file /app/AuthKey_….p8` / `ENOENT` / `EISDIR` của bản cũ không còn. Thiếu file thì log báo
 `⚠ chưa có key APNs .p8 (iOS) trong /app/keys`: thả file vào `server/keys/` rồi
-`docker compose restart server`. Bản cũ để lại thư mục rỗng mang tên file key (vd
+`docker compose up -d --build` (`restart` **không** chép lại key). Bản cũ để lại thư mục rỗng mang tên file key (vd
 `…/AuthKey_….p8/`) thì xoá đi (`sudo rmdir <đường dẫn>`).
 
 * Container nghe `0.0.0.0` (đặt sẵn `HOST`), cổng chỉ publish ra `127.0.0.1` của máy chủ (đổi cổng:

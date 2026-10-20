@@ -1,6 +1,7 @@
 # docker compose up -d --build
 # Cần trước: .env (chép .env.example: APN_TEAM_ID, APN_BUNDLE_ID…) + thả 2 file key vào server/keys/
-# (AuthKey_<KeyID>.p8, JSON service account Firebase) — tự nhận, không khai đường dẫn.
+# (AuthKey_<KeyID>.p8, JSON service account Firebase) — lúc build được CHÉP vào container (/app/keys).
+# Đổi key → chạy lại `docker compose up -d --build`.
 # WEBHOOK_TOKENS để trống thì tự tạo uuid.
 services:
   # MỘT tiến trình: nhận webhook ở /<uuid> (web Zenify trỏ tới) → bắn push ngay; xem ở /view/<uuid>
@@ -8,14 +9,7 @@ services:
     build: .
     image: zenify-push
     env_file: .env
-    environment:
-      # Docker đọc key trong ./keys (mount bên dưới) — bỏ qua đường dẫn key trong .env (thường là
-      # đường dẫn của máy khác / chạy bằng Node, trong container không có)
-      - APN_KEY_FILE=
-      - FCM_SERVICE_ACCOUNT_FILE=
     volumes:
-      # Thả file vào server/keys/ trên máy chủ: AuthKey_<KeyID>.p8 + JSON service account Firebase
-      - ./keys:/app/keys:ro
       # uuid webhook tự tạo (WEBHOOK_TOKENS để trống) — giữ qua các lần deploy lại
       - data:/app/data
     ports:

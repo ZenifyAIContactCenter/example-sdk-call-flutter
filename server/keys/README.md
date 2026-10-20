@@ -10,5 +10,6 @@ Thả 2 file key vào thư mục này — server (Node hoặc Docker) tự nhậ
 Giữ đúng tên file `.p8` Apple tải về (`AuthKey_XXXXXXXXXX.p8`). Mỗi loại chỉ để **một** file.
 Vẫn cần `APN_TEAM_ID` (và `APN_BUNDLE_ID` nếu khác app demo) trong `.env`.
 
-Mọi file trong thư mục này (trừ README) đã nằm trong `.gitignore` / `.dockerignore` — không bị
-commit, không vào image. Trên máy chủ nên `chmod 600 keys/*`.
+Mọi file trong thư mục này (trừ README) đã nằm trong `.gitignore` — không bị commit. Docker **chép**
+thư mục này vào image (`/app/keys`) lúc build: đổi key → `docker compose up -d --build`, không push image
+lên registry. Trên máy chủ nên `chmod 600 keys/*`.
