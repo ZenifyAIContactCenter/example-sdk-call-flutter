@@ -6,7 +6,7 @@ hoặc đã tắt. Sau khi đăng nhập có 2 tab mô phỏng app CRM tích h�
 - **CRM**: danh sách khách cần liên hệ, bấm 📞 là gọi (click-to-call).
 - **Gọi**: nhập số / extension, chọn theme màn cuộc gọi → mở màn quay số SDK điền sẵn số.
 
-Kèm server mẫu Node.js ở [`server/`](server/README.md): nhận webhook "Cuộc gọi App SDK" của Zenify rồi
+Kèm server mẫu Node.js ở [`server/`](server/README.md): tự làm webhook "Cuộc gọi App SDK" của Zenify và
 bắn push cuộc gọi (APNs VoIP cho iOS, FCM cho Android) đúng payload SDK cần.
 
 | Thư mục | Nội dung |
@@ -83,31 +83,33 @@ flutter run --profile --dart-define-from-file=dart_defines.local.json  # profile
 
 ## Chạy server push mẫu bằng Docker
 
-Không cần cài Node trên máy chủ. Bí mật (`.env`, key APNs `.p8`, service account Firebase) **không**
-nằm trong image: truyền lúc chạy.
+Server mẫu **tự làm webhook**: web Zenify gọi tới `https://<domain>/<uuid>`, server bắn push ngay
+lúc nhận — deploy một container là đủ, không cần webhook.site. Không cần cài Node trên máy chủ. Bí
+mật (`.env`, key APNs `.p8`, service account Firebase) **không** nằm trong image: truyền lúc chạy.
 
 ```sh
 cd server
-cp .env.example .env                       # điền APN_*, FCM_*, WEBHOOK_URL / WEBHOOK_AUTH_KEY
+cp .env.example .env                       # điền APN_*, FCM_*, WEBHOOK_AUTH_KEY
+node -e "console.log(crypto.randomUUID())" # → uuid; trong .env: WEBHOOK_TOKENS=<uuid>
 mkdir -p secrets && cp AuthKey_XXXXXXXXXX.p8 firebase-service-account.json secrets/
 # trong .env dùng đường dẫn TRONG container:
 #   APN_KEY_FILE=/secrets/AuthKey_XXXXXXXXXX.p8
 #   FCM_SERVICE_ACCOUNT_FILE=/secrets/firebase-service-account.json
 
-docker compose up -d --build push          # POST /push (cổng 3000) — web Zenify gọi tới
-# hoặc: docker compose up -d --build webhook  # đọc event từ WEBHOOK_URL, không mở cổng
+docker compose up -d --build               # webhook /<uuid> + POST /push, cổng 3000
 docker compose logs -f                     # xem kết quả bắn push
 curl -s localhost:3000/health              # {"ok": true}
 docker compose down                        # dừng
 ```
 
-- Chọn **một** trong hai service: web Zenify gọi được URL công khai → `push`; chưa có → `webhook`.
-  Đừng chạy cả hai cho cùng một nguồn event: mỗi service chống bắn trùng riêng, chạy cả hai thì máy
-  nhận push 2 lần.
-- Cổng 3000 chỉ mở trên `127.0.0.1` của máy chủ. Mở ra Internet thì đặt sau reverse proxy HTTPS và
-  **bắt buộc** đặt `WEBHOOK_AUTH_KEY` — server cầm key APNs / FCM.
-- Chạy bằng `docker run`, các biến môi trường và cách bắn thử: xem
+- Web Zenify → Webhook "Cuộc gọi App SDK": URL `https://<domain>/<uuid>`, Authen Key = `WEBHOOK_AUTH_KEY`.
+- Xem request đã nhận + kết quả bắn push: `https://<domain>/view/<uuid>`.
+- Cổng 3000 chỉ mở trên `127.0.0.1` của máy chủ — server Zenify phải gọi tới được nên đặt sau
+  reverse proxy HTTPS. uuid là "mật khẩu" của URL: đừng chia sẻ.
+- Chi tiết (đường dẫn, `docker run`, biến môi trường): xem
   [`server/README.md`](server/README.md#chạy-bằng-docker).
+- Chưa có Docker: chạy & test thẳng bằng Node (`WEBHOOK_TOKENS=<uuid> npm start`), kể cả kiểm tra key
+  APNs / FCM bằng token giả — xem [`server/README.md`](server/README.md#chạy--test-ở-máy-không-cần-docker).
 
 ## Đổi version (1.0.x)
 

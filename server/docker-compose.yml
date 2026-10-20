@@ -1,26 +1,16 @@
-# Chạy MỘT service: docker compose up -d --build push   (hoặc: … webhook)
-# Cả hai cùng nguồn event → máy nhận push 2 lần (mỗi service chống trùng riêng).
-# Cần trước: .env (chép .env.example) và key trong ./secrets/ — trong .env trỏ đường dẫn TRONG
-# container: APN_KEY_FILE=/secrets/AuthKey_XXXXXXXXXX.p8, FCM_SERVICE_ACCOUNT_FILE=/secrets/xxx.json
+# docker compose up -d --build
+# Cần trước: .env (chép .env.example) — WEBHOOK_TOKENS (uuid webhook) + key trong ./secrets/,
+# trong .env trỏ đường dẫn TRONG container:
+#   APN_KEY_FILE=/secrets/AuthKey_XXXXXXXXXX.p8, FCM_SERVICE_ACCOUNT_FILE=/secrets/xxx.json
 services:
-  # POST /push — webhook "Cuộc gọi App SDK" trên web Zenify trỏ tới đây (nên đặt WEBHOOK_AUTH_KEY)
-  push:
+  # MỘT tiến trình: nhận webhook ở /<uuid> (web Zenify trỏ tới) → bắn push ngay; xem ở /view/<uuid>
+  server:
     build: .
     image: zenify-push
     env_file: .env
     volumes:
       - ./secrets:/secrets:ro
     ports:
-      # chỉ mở trên máy chủ; ra Internet thì đặt sau reverse proxy HTTPS
-      - "127.0.0.1:3000:3000"
-    restart: unless-stopped
-
-  # Đọc event từ WEBHOOK_URL (webhook.site / bản tự host) rồi bắn push — không cần mở cổng
-  webhook:
-    build: .
-    image: zenify-push
-    command: ["node", "webhook.mjs"]
-    env_file: .env
-    volumes:
-      - ./secrets:/secrets:ro
+      # chỉ mở trên máy chủ; ra Internet (để server Zenify gọi tới) thì đặt sau reverse proxy HTTPS
+      - "127.0.0.1:${SERVER_PORT:-3000}:3000"
     restart: unless-stopped

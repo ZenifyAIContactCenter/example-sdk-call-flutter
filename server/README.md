@@ -94,23 +94,46 @@ curl -s -X POST localhost:3000/push -H 'content-type: application/json' -d @body
 
 Phản hồi: `ok`, `apns_status`, `apns_reason` (vd `BadDeviceToken`), `warning`. Xem bảng "Đọc kết quả APNs" bên dưới.
 
-## Webhook "Cuộc gọi App SDK" trên web Zenify → `POST /push` (khuyên dùng)
+## Server làm webhook luôn (khuyên dùng)
 
-1. Chạy server ở nơi có URL HTTPS công khai (đặt sau reverse proxy), nghe mọi địa chỉ:
+Server **tự là webhook** — không cần webhook.site: web Zenify POST event cuộc gọi tới
+`https://<domain>/<uuid>`, server bắn push **ngay** lúc nhận (không poll) và lưu lại để xem.
+
+1. Tạo uuid (là "mật khẩu" của URL — ai có URL là bắn được push, đừng chia sẻ) rồi khai trong `.env`:
    ```sh
-   HOST=0.0.0.0 PORT=3000 npm start
+   node -e "console.log(crypto.randomUUID())"
+   # .env: WEBHOOK_TOKENS=<uuid>          (nhiều uuid: cách nhau dấu phẩy)
    ```
-2. Web Zenify → Webhook → **Thêm webhook**: Sự kiện **Cuộc gọi App SDK**, Method `POST`,
-   URL `https://<domain>/push`, Authen Key là một chuỗi bí mật.
+2. Chạy server ở nơi có URL HTTPS công khai (đặt sau reverse proxy), nghe mọi địa chỉ:
+   ```sh
+   HOST=0.0.0.0 PORT=3000 npm start    # hoặc Docker — xem "Chạy bằng Docker"
+   ```
+3. Web Zenify → Webhook → **Thêm webhook**: Sự kiện **Cuộc gọi App SDK**, Method `POST`,
+   URL `https://<domain>/<uuid>`, Authen Key là một chuỗi bí mật.
 
    ![Thêm webhook trên web Zenify](../docs/images/zenify_add_webhook.png)
 
-3. `.env`: `WEBHOOK_AUTH_KEY=<Authen Key>`. Request thiếu / sai key bị `401`. Key nằm ở header
+4. `.env`: `WEBHOOK_AUTH_KEY=<Authen Key>`. Request thiếu / sai key bị `401`. Key nằm ở header
    `authorization` (dạng `<key>` hoặc `Bearer <key>`); header khác thì đặt `WEBHOOK_AUTH_HEADER`.
+
+| Đường dẫn | Dùng cho |
+| --- | --- |
+| `ANY /<uuid>` | Nhận event (body giống `POST /push`) → bắn push, trả kết quả (`ok`, `apns_status`…) |
+| `GET /view/<uuid>` | Trang xem request đã nhận + kết quả bắn push, tự làm mới 3 giây |
+| `GET /token/<uuid>/requests` | Cùng API JSON với webhook.site (`?per_page=`, `?sorting=oldest`) |
+| `POST /push` | Bắn push trực tiếp (vẫn giữ, cùng Authen Key) |
+
+- uuid không có trong `WEBHOOK_TOKENS` → `404`.
+- Event thiếu `payload.type` → tự thêm `"type": "CALL_IN"`. Không phải JSON / thiếu `token` hoặc
+  `payload` → bỏ qua (vẫn lưu để xem).
+- Event lặp (cùng `call_id` + `token` + `type` trong `DEDUPE_SECONDS`) không bắn lại; mỗi vòng quay
+  số mới (`CALL_IN` → `CALL_CANCEL` → `CALL_IN`…) vẫn bắn.
+- Lịch sử giữ `WEBHOOK_KEEP` request mỗi uuid (mặc định 200), **trong bộ nhớ**: khởi động lại là mất.
+  Header xác thực (`authorization`, cookie) không được lưu.
 
 Server đọc trường `os` của event: `ios` → APNs VoIP, `android` → FCM (bảng dưới).
 
-## Webhook qua webhook.site (chưa có URL công khai)
+## Webhook qua webhook.site (tuỳ chọn — chưa có máy chủ công khai)
 
 Dùng được webhook.site hoặc bản tự host cùng API (`GET /token/<uuid>/requests`): script đọc API ở
 đúng host của `WEBHOOK_URL`.
@@ -150,39 +173,90 @@ npm run webhook
 npm run webhook -- --url https://webhook.site/<uuid> --interval 1
 ```
 
+## Chạy & test ở máy (không cần Docker)
+
+Container Docker chạy đúng `node server.mjs` (Node 22) với biến môi trường — chạy thẳng bằng Node
+(≥ 20.12) là test được gần hết, kể cả key APNs / FCM thật. `.env` ở thư mục `server/` được tự đọc.
+
+```sh
+cd server
+U=$(node -e "console.log(crypto.randomUUID())")     # uuid webhook dùng để test
+WEBHOOK_TOKENS=$U WEBHOOK_AUTH_KEY=test-key npm start  # log in URL webhook + URL xem
+```
+
+Ở terminal khác — gán lại `U` bằng uuid in trong log (`webhook: http://…/<uuid>`):
+
+```sh
+U=<uuid>
+```
+
+
+```sh
+curl -s localhost:3000/health                                          # {"ok": true}
+curl -s -o /dev/null -w "%{http_code}\n" -X POST localhost:3000/$U -d '{}'   # 401: thiếu Authen Key
+
+# Kiểm tra key mà KHÔNG làm máy nào đổ chuông: token giả → APNs / FCM thật trả lỗi token
+curl -s -X POST localhost:3000/$U -H 'authorization: test-key' -H 'content-type: application/json' \
+  -d '{"token":"0000000000000000000000000000000000000000000000000000000000000000","os":"ios","is_apn_prod":false,"payload":{"type":"CALL_IN","call_id":"TEST-1"}}'
+# → apns_status 400 + BadDeviceToken = key .p8 / Key ID / Team ID đúng (key sai → 403)
+curl -s -X POST localhost:3000/$U -H 'authorization: test-key' -H 'content-type: application/json' \
+  -d '{"token":"fake-fcm-token","os":"android","payload":{"type":"CALL_IN","call_id":"TEST-2"}}'
+# → fcm_status 400 INVALID_ARGUMENT = service account Firebase đúng (sai → lỗi lấy OAuth token)
+
+# Máy thật đổ chuông: thay token thật (voip_token iOS / fcm_token Android). App chạy từ Xcode /
+# flutter run → "is_apn_prod": false; Ad Hoc / TestFlight → true
+curl -s -X POST localhost:3000/$U -H 'authorization: test-key' -H 'content-type: application/json' \
+  -d '{"token":"<token>","os":"ios","is_apn_prod":false,"payload":{"type":"CALL_IN","call_id":"TEST-3","phone_number":"0900000000"}}'
+```
+
+Xem các request vừa gửi + kết quả bắn push: mở `http://localhost:3000/view/$U` (hoặc JSON:
+`curl -s localhost:3000/token/$U/requests`).
+
+| Kết quả | Ý nghĩa |
+| --- | --- |
+| `200`, `ok: true` | Đã gửi tới APNs / FCM |
+| `401` | Thiếu / sai `WEBHOOK_AUTH_KEY` |
+| `404` | uuid không có trong `WEBHOOK_TOKENS` |
+| `skipped: "duplicate"` | Event lặp đã bắn thành công trước đó (gửi lỗi thì không tính, gửi lại được) |
+| `apns_status` / `fcm_status` khác 200 | Xem "Đọc kết quả APNs" bên dưới |
+
+Docker chỉ thêm phần build image, đọc `.env` qua `env_file` và mount `./secrets` — test bằng mục
+dưới khi máy có Docker (macOS: Docker Desktop, hoặc `brew install colima docker docker-compose && colima start`).
+
 ## Chạy bằng Docker
 
 Image chỉ chứa code (Node 22, không cần `npm install`). Bí mật **không** nằm trong image
-(`.dockerignore` chặn `.env`, `secrets/`, `*.p8`): biến truyền qua `--env-file`, key mount vào
+(`.dockerignore` chặn `.env`, `secrets/`, `*.p8`): biến truyền qua `.env`, key mount vào
 `/secrets` lúc chạy.
 
 ```sh
+cp .env.example .env                 # điền APN_*, FCM_*, WEBHOOK_TOKENS, WEBHOOK_AUTH_KEY
 mkdir -p secrets && cp AuthKey_XXXXXXXXXX.p8 firebase-service-account.json secrets/
 # trong .env trỏ đường dẫn TRONG container:
 #   APN_KEY_FILE=/secrets/AuthKey_XXXXXXXXXX.p8
 #   FCM_SERVICE_ACCOUNT_FILE=/secrets/firebase-service-account.json
 
-docker compose up -d --build push   # POST /push, cổng 3000 — web Zenify gọi tới
-# hoặc: docker compose up -d --build webhook   # đọc WEBHOOK_URL, không mở cổng
-docker compose logs -f              # xem kết quả bắn push
+docker compose up -d --build         # một service: webhook /<uuid> + POST /push, cổng 3000
+docker compose logs -f               # in URL webhook lúc khởi động + kết quả bắn push
 curl -s localhost:3000/health
 ```
+
+Web Zenify trỏ webhook tới `https://<domain>/<uuid>`; xem request ở `https://<domain>/view/<uuid>`.
 
 Không dùng compose:
 
 ```sh
 docker build -t zenify-push .
 docker run -d --name zenify-push --env-file .env -v "$PWD/secrets:/secrets:ro" \
-  -p 127.0.0.1:3000:3000 zenify-push                     # POST /push
-docker run -d --name zenify-webhook --env-file .env -v "$PWD/secrets:/secrets:ro" \
-  zenify-push node webhook.mjs                           # đọc webhook, không mở cổng
+  -p 127.0.0.1:3000:3000 zenify-push
 ```
 
-* Container nghe `0.0.0.0` (đặt sẵn `HOST`), cổng chỉ publish ra `127.0.0.1` của máy chủ. Mở ra
-  Internet thì đặt sau reverse proxy HTTPS và **bắt buộc** đặt `WEBHOOK_AUTH_KEY` — server cầm key
-  APNs / FCM.
-* Chọn **một** trong hai service: web Zenify gọi được URL công khai → `push`; chưa có → `webhook`.
-  Chạy cả hai cho cùng nguồn event thì máy nhận push 2 lần (mỗi service chống trùng riêng).
+* Container nghe `0.0.0.0` (đặt sẵn `HOST`), cổng chỉ publish ra `127.0.0.1` của máy chủ (đổi cổng:
+  `SERVER_PORT`). Server Zenify phải gọi tới được → đặt sau reverse proxy HTTPS, và **nên** đặt
+  `WEBHOOK_AUTH_KEY` — server cầm key APNs / FCM.
+* Vẫn muốn đọc từ webhook.site bên ngoài: `docker run … zenify-push node webhook.mjs`
+  (cần `WEBHOOK_URL`). Đừng chạy cùng lúc với webhook `/<uuid>` cho cùng nguồn event — máy nhận
+  push 2 lần.
 
 ## Lấy token
 
