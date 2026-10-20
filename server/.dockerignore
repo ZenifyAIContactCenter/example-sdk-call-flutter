@@ -5,6 +5,7 @@ secrets/
 *service-account*.json
 body.json
 data/
+keys/
 node_modules/
 Dockerfile
 docker-compose.yml

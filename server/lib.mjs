@@ -14,27 +14,75 @@ const b64url = (buf) => Buffer.from(buf).toString('base64url');
 export const short = (t) => `${String(t).slice(0, 8)}…${String(t).slice(-6)}`;
 
 /**
- * Đường dẫn file key trong biến môi trường. Tương đối → tính theo thư mục server/ (nơi có .env),
- * KHÔNG theo thư mục đang đứng khi chạy lệnh — trước đây chạy từ thư mục khác là ENOENT.
+ * Thư mục key: thả file vào đây là xong, không cần khai đường dẫn trong .env.
+ *   · APNs: `AuthKey_<KeyID>.p8` (Key ID lấy luôn từ tên file nếu không đặt APN_KEY_ID)
+ *   · FCM : file JSON service account Firebase (`"type": "service_account"`), tên tuỳ ý
+ * Mặc định `server/keys/` (Docker: `./keys` mount vào `/app/keys`, chỉ đọc). Đổi: KEYS_DIR.
+ */
+export const KEYS_DIR = path.resolve(DIR, process.env.KEYS_DIR || 'keys');
+
+function listKeys(ext) {
+  try {
+    return fs
+      .readdirSync(KEYS_DIR)
+      .filter((f) => f.toLowerCase().endsWith(ext) && !f.startsWith('.'))
+      .map((f) => path.join(KEYS_DIR, f))
+      .filter((p) => fs.statSync(p).isFile());
+  } catch {
+    return [];
+  }
+}
+
+const isServiceAccount = (p) => {
+  try {
+    return JSON.parse(fs.readFileSync(p, 'utf8'))?.type === 'service_account';
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Đường dẫn file key. Ưu tiên biến môi trường (tương đối → tính theo thư mục server/, không theo
+ * thư mục đang đứng khi chạy lệnh); không đặt → tự tìm trong KEYS_DIR. Trả '' nếu không có.
  */
 export function keyPath(name) {
   const v = process.env[name];
-  return v ? path.resolve(DIR, v) : '';
+  if (v) return path.resolve(DIR, v);
+  const found = name === 'APN_KEY_FILE' ? listKeys('.p8') : listKeys('.json').filter(isServiceAccount);
+  return found.length === 1 ? found[0] : '';
 }
 
-/** Kiểm tra file key lúc khởi động → báo rõ thay vì lỗi ENOENT ở lần bắn push đầu tiên. */
+/** Key ID APNs: APN_KEY_ID, không có thì lấy từ tên file AuthKey_<KeyID>.p8 */
+export function apnKeyId() {
+  if (process.env.APN_KEY_ID) return process.env.APN_KEY_ID;
+  return /AuthKey_([A-Z0-9]{10})\.p8$/i.exec(keyPath('APN_KEY_FILE'))?.[1]?.toUpperCase() ?? '';
+}
+
+/** Kiểm tra key lúc khởi động → báo rõ (thiếu / thừa / là thư mục) thay vì lỗi ở lần bắn đầu tiên. */
 export function checkKeyFiles() {
   const out = [];
   for (const name of ['APN_KEY_FILE', 'FCM_SERVICE_ACCOUNT_FILE']) {
-    const p = keyPath(name);
-    if (!p) out.push(`${name} chưa đặt (${name === 'APN_KEY_FILE' ? 'không bắn được iOS' : 'không bắn được Android'})`);
-    else if (!fs.existsSync(p)) out.push(`${name}: KHÔNG có file ${p} — chép file vào đó hoặc sửa đường dẫn trong .env`);
-    else if (fs.statSync(p).isDirectory()) {
-      // Docker: đường dẫn trong .env không có trên máy chủ → Docker tự tạo THƯ MỤC rỗng rồi mount vào
-      out.push(`${name}: ${p} là THƯ MỤC, không phải file — đường dẫn trong .env không có trên máy chủ (Docker đã tự tạo thư mục rỗng); sửa .env thành đường dẫn file thật`);
+    const what = name === 'APN_KEY_FILE' ? 'key APNs .p8 (iOS)' : 'service account Firebase .json (Android)';
+    if (!process.env[name]) {
+      const n = name === 'APN_KEY_FILE' ? listKeys('.p8').length : listKeys('.json').filter(isServiceAccount).length;
+      if (n === 0) out.push(`chưa có ${what} trong ${KEYS_DIR} — thả file vào đó (hoặc đặt ${name})`);
+      else if (n > 1) out.push(`có ${n} file ${what} trong ${KEYS_DIR} — chỉ để MỘT, hoặc đặt ${name} chỉ rõ file`);
+      continue;
     }
+    const p = keyPath(name);
+    if (!fs.existsSync(p)) out.push(`${name}: KHÔNG có file ${p} — chép file vào đó hoặc sửa .env`);
+    else if (fs.statSync(p).isDirectory()) out.push(`${name}: ${p} là THƯ MỤC, không phải file — sửa .env thành đường dẫn file thật`);
   }
+  if (keyPath('APN_KEY_FILE') && !apnKeyId()) out.push('không biết Key ID APNs — đặt tên file AuthKey_<KeyID>.p8 hoặc đặt APN_KEY_ID');
+  if (keyPath('APN_KEY_FILE') && !process.env.APN_TEAM_ID) out.push('thiếu APN_TEAM_ID trong .env (không bắn được iOS)');
   return out;
+}
+
+/** Dòng log: đang dùng key nào (chỉ tên file, không in nội dung) */
+export function describeKeys() {
+  const a = keyPath('APN_KEY_FILE');
+  const f = keyPath('FCM_SERVICE_ACCOUNT_FILE');
+  return `key APNs: ${a ? path.basename(a) : '—'} · Firebase: ${f ? path.basename(f) : '—'}`;
 }
 
 export function missingEnv(...keys) {
@@ -57,7 +105,7 @@ function apnsJwt() {
   const now = Math.floor(Date.now() / 1000);
   if (apnsJwtCache.token && now - apnsJwtCache.at < 3000) return apnsJwtCache.token;
   const key = fs.readFileSync(keyPath('APN_KEY_FILE'), 'utf8');
-  const head = b64url(JSON.stringify({ alg: 'ES256', kid: env('APN_KEY_ID') }));
+  const head = b64url(JSON.stringify({ alg: 'ES256', kid: apnKeyId() }));
   const body = b64url(JSON.stringify({ iss: env('APN_TEAM_ID'), iat: now }));
   const sig = crypto.sign('sha256', Buffer.from(`${head}.${body}`), { key, dsaEncoding: 'ieee-p1363' });
   apnsJwtCache = { token: `${head}.${body}.${b64url(sig)}`, at: now };
@@ -69,7 +117,9 @@ function apnsJwt() {
  * @returns {{status:number, apnsId:string, body:string, host:string}}
  */
 export function sendApnsVoip({ token, payload, production = apnsDefaultProduction() }) {
-  requireEnv('APN_KEY_FILE', 'APN_KEY_ID', 'APN_TEAM_ID');
+  if (!keyPath('APN_KEY_FILE')) throw new Error(`Chưa có key APNs .p8 — thả vào ${KEYS_DIR} hoặc đặt APN_KEY_FILE`);
+  if (!apnKeyId()) throw new Error('Không biết Key ID APNs — tên file AuthKey_<KeyID>.p8 hoặc đặt APN_KEY_ID');
+  requireEnv('APN_TEAM_ID');
   const host = production ? 'https://api.push.apple.com' : 'https://api.sandbox.push.apple.com';
   const topic = `${env('APN_BUNDLE_ID', 'com.example.sdk.zenify')}.voip`;
   return new Promise((resolve, reject) => {
@@ -105,7 +155,9 @@ export function sendApnsVoip({ token, payload, production = apnsDefaultProductio
 
 let fcmCache = { token: '', exp: 0, sa: null };
 async function fcmAuth() {
-  requireEnv('FCM_SERVICE_ACCOUNT_FILE');
+  if (!keyPath('FCM_SERVICE_ACCOUNT_FILE')) {
+    throw new Error(`Chưa có service account Firebase .json — thả vào ${KEYS_DIR} hoặc đặt FCM_SERVICE_ACCOUNT_FILE`);
+  }
   const now = Math.floor(Date.now() / 1000);
   if (fcmCache.token && now < fcmCache.exp - 60) return fcmCache;
   const sa = JSON.parse(fs.readFileSync(keyPath('FCM_SERVICE_ACCOUNT_FILE'), 'utf8'));

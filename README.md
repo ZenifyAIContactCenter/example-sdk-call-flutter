@@ -89,9 +89,8 @@ mật (`.env`, key APNs `.p8`, service account Firebase) **không** nằm trong 
 
 ```sh
 cd server
-cp .env.example .env                       # điền APN_*, FCM_*, WEBHOOK_AUTH_KEY
-# APN_KEY_FILE / FCM_SERVICE_ACCOUNT_FILE: đường dẫn file key TRÊN MÁY CHỦ (dùng chung khi chạy
-# bằng Node) — docker-compose.yml tự mount 2 file đó vào container
+cp AuthKey_XXXXXXXXXX.p8 <project>-firebase-adminsdk-….json keys/   # thả 2 file key vào keys/
+cp .env.example .env                       # điền APN_TEAM_ID, WEBHOOK_AUTH_KEY
 
 docker compose up -d --build               # webhook /<uuid> + POST /push, cổng 3000
 docker compose logs -f                     # URL webhook (uuid tự tạo lần đầu, giữ qua deploy) + kết quả bắn push

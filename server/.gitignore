@@ -7,3 +7,6 @@ node_modules/
 !.env.example
 # uuid webhook tự tạo (server.mjs) — là "mật khẩu" của URL
 data/
+# key APNs / Firebase thả vào đây — giữ README trong thư mục
+keys/*
+!keys/README.md

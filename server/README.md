@@ -12,21 +12,28 @@ Bắn push cuộc gọi thử tới máy thật, đúng payload server Zenify, �
 
 Cấu hình bằng biến môi trường. Cách gọn nhất là file `.env` (script tự đọc; biến có sẵn trong shell được ưu tiên):
 
+**Key: thả file vào thư mục `server/keys/`** — server (Node hoặc Docker) tự nhận, không khai đường dẫn:
+
 ```sh
 cd server
-cp .env.example .env   # điền APN_KEY_FILE, APN_KEY_ID, APN_TEAM_ID, FCM_SERVICE_ACCOUNT_FILE
+cp ~/Downloads/AuthKey_XXXXXXXXXX.p8 keys/                 # giữ nguyên tên Apple đặt: Key ID lấy từ tên file
+cp ~/Downloads/<project>-firebase-adminsdk-….json keys/    # service account Firebase, tên tuỳ ý
+cp .env.example .env   # điền APN_TEAM_ID (+ APN_BUNDLE_ID nếu khác app demo)
 ```
+
+Log lúc khởi động in key đang dùng (`key APNs: AuthKey_….p8 · Firebase: ….json`) hoặc cảnh báo
+`⚠ chưa có … trong …/keys` / `có 2 file …` (mỗi loại chỉ để **một** file).
 
 | Biến | Ý nghĩa |
 | --- | --- |
-| `APN_KEY_FILE` | Đường dẫn file `.p8` |
-| `APN_KEY_ID` | Key ID (10 ký tự) |
-| `APN_TEAM_ID` | Team ID Apple Developer (10 ký tự) |
+| `APN_TEAM_ID` | Team ID Apple Developer (10 ký tự) — **bắt buộc** cho iOS |
+| `APN_KEY_FILE` / `APN_KEY_ID` | Tuỳ chọn: trỏ file `.p8` ở chỗ khác `keys/` / Key ID nếu tên file không phải `AuthKey_<KeyID>.p8` |
 | `APN_BUNDLE_ID` | Bundle id app (mặc định `com.example.sdk.zenify` của app demo; topic VoIP = bundle + `.voip`) |
 | `APN_PRODUCTION` | `true` (mặc định): Ad Hoc / TestFlight. `false`: bản chạy từ Xcode. `--sandbox` ghi đè |
-| `FCM_SERVICE_ACCOUNT_FILE` | Đường dẫn file service account JSON |
+| `FCM_SERVICE_ACCOUNT_FILE` | Tuỳ chọn: trỏ file service account JSON ở chỗ khác `keys/` |
+| `KEYS_DIR` | Tuỳ chọn: đổi thư mục key (mặc định `server/keys/`) |
 
-`.env` và `secrets/` đã nằm trong `.gitignore` — **không commit key**.
+`.env`, `keys/*` và `secrets/` đã nằm trong `.gitignore` — **không commit key**.
 
 ## Lệnh nhanh (`npm run …`)
 
@@ -285,18 +292,13 @@ dưới khi máy có Docker (macOS: Docker Desktop, hoặc `brew install colima 
 ## Chạy bằng Docker
 
 Image chỉ chứa code (Node 22, không cần `npm install`). Bí mật **không** nằm trong image
-(`.dockerignore` chặn `.env`, `secrets/`, `*.p8`): biến truyền qua `.env`, 2 file key được mount
-(chỉ đọc) lúc chạy.
-
-**Dùng chung `.env` với lúc chạy bằng Node**: `APN_KEY_FILE` / `FCM_SERVICE_ACCOUNT_FILE` ghi đường
-dẫn file trên **máy chủ** (tuyệt đối, hoặc tương đối từ thư mục `server/`, vd `secrets/AuthKey_….p8`).
-`docker-compose.yml` tự mount đúng 2 file đó vào `/keys` trong container và trỏ biến vào đó —
-**không** ghi đường dẫn trong container vào `.env`.
+(`.dockerignore` chặn `.env`, `keys/`, `*.p8`): biến truyền qua `.env`, thư mục `keys/` được mount
+vào container (chỉ đọc) lúc chạy.
 
 ```sh
-cp .env.example .env                 # điền APN_*, FCM_*, WEBHOOK_AUTH_KEY (uuid webhook tự tạo)
-#   APN_KEY_FILE=/etc/zenify-push/AuthKey_XXXXXXXXXX.p8          ← đường dẫn trên máy chủ
-#   FCM_SERVICE_ACCOUNT_FILE=/etc/zenify-push/firebase-service-account.json
+cp AuthKey_XXXXXXXXXX.p8 <project>-firebase-adminsdk-….json keys/   # thả 2 file key vào keys/
+chmod 600 keys/*
+cp .env.example .env                 # điền APN_TEAM_ID, WEBHOOK_AUTH_KEY (uuid webhook tự tạo)
 
 docker compose up -d --build         # một service: webhook /<uuid> + POST /push, cổng 3000
 docker compose logs -f               # URL webhook (uuid tự tạo, lưu ở volume data) + kết quả bắn push
@@ -310,21 +312,15 @@ Không dùng compose:
 
 ```sh
 docker build -t zenify-push .
-docker run -d --name zenify-push --env-file .env \
-  -v /etc/zenify-push/AuthKey_XXXXXXXXXX.p8:/keys/apns.p8:ro -e APN_KEY_FILE=/keys/apns.p8 \
-  -v /etc/zenify-push/firebase-service-account.json:/keys/fcm.json:ro -e FCM_SERVICE_ACCOUNT_FILE=/keys/fcm.json \
-  -v zenify-push-data:/app/data -p 127.0.0.1:3000:3000 zenify-push
+docker run -d --name zenify-push --env-file .env -e APN_KEY_FILE= -e FCM_SERVICE_ACCOUNT_FILE= \
+  -v "$PWD/keys:/app/keys:ro" -v zenify-push-data:/app/data -p 127.0.0.1:3000:3000 zenify-push
 ```
 
-Lỗi đường dẫn file key khi chạy Docker:
-
-| Lỗi | Nguyên nhân | Sửa |
-| --- | --- | --- |
-| `bind source path does not exist: …` (lúc `docker compose up`) | File trong `APN_KEY_FILE` / `FCM_SERVICE_ACCOUNT_FILE` không có trên máy chủ | Chép file lên máy chủ hoặc sửa `.env` thành đường dẫn file **trên máy chủ** |
-| `ENOENT … AuthKey_….p8` | `.env` ghi đường dẫn trong container kiểu `/secrets/…` (bản cũ) hoặc đường dẫn của máy khác | Như trên |
-| `EISDIR: illegal operation on a directory` | Bản compose cũ: đường dẫn không có trên máy chủ → Docker tự tạo **thư mục** rỗng ở đó rồi mount vào | `git pull` bản mới, sửa `.env`, **xoá thư mục rỗng** Docker đã tạo (`sudo rmdir <đường dẫn>`) rồi `docker compose up -d` |
-
-Log lúc khởi động cũng cảnh báo `⚠ APN_KEY_FILE: … là THƯ MỤC` / `KHÔNG có file …` khi gặp các ca này.
+Docker **bỏ qua** `APN_KEY_FILE` / `FCM_SERVICE_ACCOUNT_FILE` trong `.env` và chỉ đọc `keys/` — nên
+lỗi kiểu `ENOENT … AuthKey_….p8` / `EISDIR` của bản cũ không còn. Thiếu file thì log báo
+`⚠ chưa có key APNs .p8 (iOS) trong /app/keys`: thả file vào `server/keys/` rồi
+`docker compose restart server`. Bản cũ để lại thư mục rỗng mang tên file key (vd
+`…/AuthKey_….p8/`) thì xoá đi (`sudo rmdir <đường dẫn>`).
 
 * Container nghe `0.0.0.0` (đặt sẵn `HOST`), cổng chỉ publish ra `127.0.0.1` của máy chủ (đổi cổng:
   `SERVER_PORT`). Server Zenify phải gọi tới được → đặt sau reverse proxy HTTPS, và **nên** đặt
@@ -350,14 +346,13 @@ sudo chown -R "$USER" /opt/example-sdk-call-flutter
 cd /opt/example-sdk-call-flutter/server
 ```
 
-**2. Cấu hình** — key để ngoài thư mục code, `.env` trỏ đường dẫn tuyệt đối:
+**2. Cấu hình** — thả key vào `server/keys/`:
 
 ```sh
-sudo mkdir -p /etc/zenify-push && sudo cp AuthKey_XXXXXXXXXX.p8 firebase-service-account.json /etc/zenify-push/
+cp AuthKey_XXXXXXXXXX.p8 <project>-firebase-adminsdk-….json keys/ && chmod 600 keys/*
 cp .env.example .env
 # .env:
-#   APN_KEY_FILE=/etc/zenify-push/AuthKey_XXXXXXXXXX.p8
-#   FCM_SERVICE_ACCOUNT_FILE=/etc/zenify-push/firebase-service-account.json
+#   APN_TEAM_ID=<Team ID>
 #   WEBHOOK_AUTH_KEY=<Authen Key>    ← trùng ô Authen Key trên web Zenify
 #   (uuid webhook tự tạo lần chạy đầu, lưu ở server/data/webhook-tokens — xem log)
 chmod 600 .env
@@ -393,7 +388,7 @@ sudo systemctl daemon-reload && sudo systemctl enable --now zenify-push
 journalctl -u zenify-push -f         # log: URL webhook lúc khởi động + kết quả bắn push
 ```
 
-User chạy service (`www-data` ở trên) phải đọc được `.env` và key, và **ghi được** `server/data/`
+User chạy service (`www-data` ở trên) phải đọc được `.env` và `keys/`, và **ghi được** `server/data/`
 (uuid webhook tự tạo): `sudo mkdir -p data && sudo chown www-data data`. Không dùng systemd thì
 `pm2 start server.mjs --name zenify-push && pm2 save` cũng được.
 

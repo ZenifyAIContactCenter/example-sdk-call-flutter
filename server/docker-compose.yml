@@ -1,7 +1,7 @@
 # docker compose up -d --build
-# Cần trước: .env (chép .env.example). Dùng CHUNG .env với lúc chạy bằng Node: APN_KEY_FILE /
-# FCM_SERVICE_ACCOUNT_FILE ghi đường dẫn trên MÁY CHỦ (tuyệt đối, hoặc tương đối từ thư mục
-# server/) — compose tự mount đúng file đó vào container. WEBHOOK_TOKENS để trống thì tự tạo.
+# Cần trước: .env (chép .env.example: APN_TEAM_ID, APN_BUNDLE_ID…) + thả 2 file key vào server/keys/
+# (AuthKey_<KeyID>.p8, JSON service account Firebase) — tự nhận, không khai đường dẫn.
+# WEBHOOK_TOKENS để trống thì tự tạo uuid.
 services:
   # MỘT tiến trình: nhận webhook ở /<uuid> (web Zenify trỏ tới) → bắn push ngay; xem ở /view/<uuid>
   server:
@@ -9,26 +9,13 @@ services:
     image: zenify-push
     env_file: .env
     environment:
-      # đường dẫn TRONG container của 2 file key mount bên dưới (ghi đè giá trị trong .env)
-      - APN_KEY_FILE=/keys/apns.p8
-      - FCM_SERVICE_ACCOUNT_FILE=/keys/firebase-service-account.json
+      # Docker đọc key trong ./keys (mount bên dưới) — bỏ qua đường dẫn key trong .env (thường là
+      # đường dẫn của máy khác / chạy bằng Node, trong container không có)
+      - APN_KEY_FILE=
+      - FCM_SERVICE_ACCOUNT_FILE=
     volumes:
-      # file key trên máy chủ (lấy từ .env) → /keys trong container, chỉ đọc.
-      # Cú pháp dài + create_host_path: false: đường dẫn KHÔNG có trên máy chủ thì compose báo lỗi
-      # ngay. Cú pháp ngắn "path:/keys/…" thì Docker tự tạo THƯ MỤC rỗng ở đó (đường dẫn tương đối
-      # không có "./" còn bị hiểu thành tên volume) → server đọc ra lỗi EISDIR.
-      - type: bind
-        source: ${APN_KEY_FILE:?đặt APN_KEY_FILE trong .env (đường dẫn file .p8 trên máy chủ)}
-        target: /keys/apns.p8
-        read_only: true
-        bind:
-          create_host_path: false
-      - type: bind
-        source: ${FCM_SERVICE_ACCOUNT_FILE:?đặt FCM_SERVICE_ACCOUNT_FILE trong .env (file JSON Firebase trên máy chủ)}
-        target: /keys/firebase-service-account.json
-        read_only: true
-        bind:
-          create_host_path: false
+      # Thả file vào server/keys/ trên máy chủ: AuthKey_<KeyID>.p8 + JSON service account Firebase
+      - ./keys:/app/keys:ro
       # uuid webhook tự tạo (WEBHOOK_TOKENS để trống) — giữ qua các lần deploy lại
       - data:/app/data
     ports:
