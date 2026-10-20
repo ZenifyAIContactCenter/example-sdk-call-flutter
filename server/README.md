@@ -99,15 +99,19 @@ Phản hồi: `ok`, `apns_status`, `apns_reason` (vd `BadDeviceToken`), `warning
 Server **tự là webhook** — không cần webhook.site: web Zenify POST event cuộc gọi tới
 `https://<domain>/<uuid>`, server bắn push **ngay** lúc nhận (không poll) và lưu lại để xem.
 
-1. Tạo uuid (là "mật khẩu" của URL — ai có URL là bắn được push, đừng chia sẻ) rồi khai trong `.env`:
+1. Chạy server ở nơi có URL HTTPS công khai (đặt sau reverse proxy):
    ```sh
-   node -e "console.log(crypto.randomUUID())"
-   # .env: WEBHOOK_TOKENS=<uuid>          (nhiều uuid: cách nhau dấu phẩy)
+   npm start                           # hoặc Docker — xem "Chạy bằng Docker"
    ```
-2. Chạy server ở nơi có URL HTTPS công khai (đặt sau reverse proxy), nghe mọi địa chỉ:
-   ```sh
-   HOST=0.0.0.0 PORT=3000 npm start    # hoặc Docker — xem "Chạy bằng Docker"
+2. **uuid tự tạo**: lần chạy đầu server tạo một uuid (là "mật khẩu" của URL — đừng chia sẻ), lưu ở
+   `data/webhook-tokens` (Docker: volume `data`) và in ra log:
+   ```text
+   webhook uuid (tạo mới, đã lưu …/data/webhook-tokens):
+   webhook: http://127.0.0.1:3000/<uuid>   (xem: /view/<uuid>)
    ```
+   Các lần khởi động sau dùng lại đúng uuid đó. Muốn tự chọn uuid / nhiều uuid: đặt
+   `WEBHOOK_TOKENS=<uuid>[,<uuid>…]` trong `.env` (ưu tiên hơn file). Xoá `data/webhook-tokens` là
+   lần chạy sau ra uuid mới — URL trên web Zenify phải đổi theo.
 3. Web Zenify → Webhook → **Thêm webhook**: Sự kiện **Cuộc gọi App SDK**, Method `POST`,
    URL `https://<domain>/<uuid>`, Authen Key là một chuỗi bí mật.
 
@@ -119,7 +123,7 @@ Server **tự là webhook** — không cần webhook.site: web Zenify POST event
 | Đường dẫn | Dùng cho |
 | --- | --- |
 | `ANY /<uuid>` | Nhận event (body giống `POST /push`) → bắn push, trả kết quả (`ok`, `apns_status`…) |
-| `GET /view/<uuid>` | Trang xem request đã nhận + kết quả bắn push, tự làm mới 3 giây |
+| `GET /view/<uuid>` | Giao diện xem request (như webhook.site): danh sách bên trái, chi tiết (kết quả bắn push, body, header) bên phải, tự cập nhật 2 giây, nút copy URL. Mở `/<uuid>` bằng trình duyệt cũng tự chuyển sang đây |
 | `GET /token/<uuid>/requests` | Cùng API JSON với webhook.site (`?per_page=`, `?sorting=oldest`) |
 | `POST /push` | Bắn push trực tiếp (vẫn giữ, cùng Authen Key) |
 
@@ -132,6 +136,61 @@ Server **tự là webhook** — không cần webhook.site: web Zenify POST event
   Header xác thực (`authorization`, cookie) không được lưu.
 
 Server đọc trường `os` của event: `ios` → APNs VoIP, `android` → FCM (bảng dưới).
+
+## Xem giao diện webhook
+
+Server có sẵn trang xem request đã nhận (giống webhook.site) — dùng để kiểm tra Zenify có gửi event
+không, gửi gì, và push đã tới APNs / FCM chưa.
+
+**Mở trang**
+
+| Chạy ở | Mở trên trình duyệt |
+| --- | --- |
+| Máy của bạn (`npm start`) | `http://localhost:3000/view/<uuid>` |
+| Docker trên máy chủ | `http://localhost:3000/view/<uuid>` trên máy chủ, hoặc qua tunnel SSH: `ssh -L 3000:127.0.0.1:3000 <máy chủ>` rồi mở ở máy bạn |
+| Sau reverse proxy | `https://<domain>/view/<uuid>` |
+
+Mở chính URL webhook `…/<uuid>` bằng trình duyệt cũng tự chuyển sang trang này.
+
+Lấy `<uuid>`:
+
+```sh
+head -1 data/webhook-tokens                        # chạy bằng Node (uuid tự tạo)
+docker compose logs server | grep "webhook:"       # Docker — dòng "webhook: http://…/<uuid>"
+journalctl -u zenify-push | grep "webhook:"        # systemd
+```
+
+Đặt `WEBHOOK_TOKENS` thì uuid là giá trị đó.
+
+**Trên trang có gì**
+
+- **Thanh trên**: số request, URL webhook và nút **Copy URL** (dán vào ô URL webhook trên web Zenify).
+- **Cột trái** — mỗi request một dòng, mới nhất ở trên: method · `os` · `type`, giờ (theo máy bạn),
+  `call_id`, token rút gọn và kết quả:
+
+  | Dấu | Nghĩa |
+  | --- | --- |
+  | ✅ `apns-voip` / `fcm-android` | Đã gửi tới APNs / FCM thành công |
+  | ⏭ `duplicate` | Event lặp đã bắn trước đó — bỏ qua (xem "Server làm webhook luôn") |
+  | ⏭ `body không phải JSON` / `thiếu token / payload` | Request không phải event cuộc gọi |
+  | ❌ `BadDeviceToken (400)`… | APNs / FCM từ chối — tra bảng "Đọc kết quả APNs" bên dưới |
+
+- **Cột phải** — request đang chọn: **Kết quả bắn push** (phản hồi APNs / FCM), **Body** (JSON Zenify
+  gửi: `token`, `os`, `is_apn_prod`, `payload`), **Header** (không có header xác thực), IP người gửi.
+
+Trang tự cập nhật mỗi 2 giây, không tải lại nên request đang chọn vẫn giữ nguyên. Giữ tối đa
+`WEBHOOK_KEEP` request (mặc định 200) trong bộ nhớ — khởi động lại server là mất lịch sử.
+
+**Đọc nhanh khi máy không đổ chuông**
+
+1. Không có request nào lúc khách gọi → Zenify chưa gửi tới server: kiểm tra URL / Sự kiện **Cuộc gọi
+   App SDK** trên web Zenify, reverse proxy, `WEBHOOK_AUTH_KEY` (sai key thì Zenify nhận `401`).
+2. Có request, ❌ → push bị APNs / FCM từ chối: xem lý do (sai môi trường `is_apn_prod`, token cũ…).
+3. Có request, ✅ mà máy vẫn không đổ chuông → push đã tới Apple / Google: kiểm tra phía app
+   (quyền notification, token đúng máy, app chạy bản profile / release).
+
+**Bảo mật**: ai có `<uuid>` đều xem được trang này (body chứa token push của máy). Đừng chia sẻ URL;
+cần chặn thêm thì đặt Basic Auth ở reverse proxy cho đường dẫn `/view/` và `/token/`.
 
 ## Webhook qua webhook.site (tuỳ chọn — chưa có máy chủ công khai)
 
@@ -180,14 +239,13 @@ Container Docker chạy đúng `node server.mjs` (Node 22) với biến môi tr�
 
 ```sh
 cd server
-U=$(node -e "console.log(crypto.randomUUID())")     # uuid webhook dùng để test
-WEBHOOK_TOKENS=$U WEBHOOK_AUTH_KEY=test-key npm start  # log in URL webhook + URL xem
+WEBHOOK_AUTH_KEY=test-key npm start   # uuid tự tạo (lần đầu) / đọc lại từ data/webhook-tokens
 ```
 
-Ở terminal khác — gán lại `U` bằng uuid in trong log (`webhook: http://…/<uuid>`):
+Ở terminal khác (cùng thư mục `server/`):
 
 ```sh
-U=<uuid>
+U=$(head -1 data/webhook-tokens)      # uuid server đang dùng (đặt WEBHOOK_TOKENS thì lấy từ log)
 ```
 
 
@@ -209,7 +267,8 @@ curl -s -X POST localhost:3000/$U -H 'authorization: test-key' -H 'content-type:
   -d '{"token":"<token>","os":"ios","is_apn_prod":false,"payload":{"type":"CALL_IN","call_id":"TEST-3","phone_number":"0900000000"}}'
 ```
 
-Xem các request vừa gửi + kết quả bắn push: mở `http://localhost:3000/view/$U` (hoặc JSON:
+Xem các request vừa gửi + kết quả bắn push: mở `http://localhost:3000/view/$U` — cách đọc trang ở
+"Xem giao diện webhook" (hoặc JSON:
 `curl -s localhost:3000/token/$U/requests`).
 
 | Kết quả | Ý nghĩa |
@@ -230,18 +289,19 @@ Image chỉ chứa code (Node 22, không cần `npm install`). Bí mật **khôn
 `/secrets` lúc chạy.
 
 ```sh
-cp .env.example .env                 # điền APN_*, FCM_*, WEBHOOK_TOKENS, WEBHOOK_AUTH_KEY
+cp .env.example .env                 # điền APN_*, FCM_*, WEBHOOK_AUTH_KEY (uuid webhook tự tạo)
 mkdir -p secrets && cp AuthKey_XXXXXXXXXX.p8 firebase-service-account.json secrets/
 # trong .env trỏ đường dẫn TRONG container:
 #   APN_KEY_FILE=/secrets/AuthKey_XXXXXXXXXX.p8
 #   FCM_SERVICE_ACCOUNT_FILE=/secrets/firebase-service-account.json
 
 docker compose up -d --build         # một service: webhook /<uuid> + POST /push, cổng 3000
-docker compose logs -f               # in URL webhook lúc khởi động + kết quả bắn push
+docker compose logs -f               # URL webhook (uuid tự tạo, lưu ở volume data) + kết quả bắn push
 curl -s localhost:3000/health
 ```
 
-Web Zenify trỏ webhook tới `https://<domain>/<uuid>`; xem request ở `https://<domain>/view/<uuid>`.
+Web Zenify trỏ webhook tới `https://<domain>/<uuid>`; xem request ở `https://<domain>/view/<uuid>`
+(chưa mở proxy: tunnel SSH — xem "Xem giao diện webhook").
 
 Không dùng compose:
 
@@ -257,6 +317,88 @@ docker run -d --name zenify-push --env-file .env -v "$PWD/secrets:/secrets:ro" \
 * Vẫn muốn đọc từ webhook.site bên ngoài: `docker run … zenify-push node webhook.mjs`
   (cần `WEBHOOK_URL`). Đừng chạy cùng lúc với webhook `/<uuid>` cho cùng nguồn event — máy nhận
   push 2 lần.
+
+## Chạy trên máy chủ không dùng Docker
+
+Chỉ cần Node.js ≥ 20.12 (khuyên Node 22 LTS), **không** cần `npm install` — server không có
+dependency. `.env` trong thư mục `server/` được tự đọc.
+
+**1. Cài Node và lấy code**
+
+```sh
+# Ubuntu / Debian (Node 22 từ NodeSource), hoặc dùng nvm
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - && sudo apt-get install -y nodejs
+node --version                       # ≥ v20.12
+
+sudo git clone https://github.com/ZenifyAIContactCenter/example-sdk-call-flutter.git /opt/example-sdk-call-flutter
+sudo chown -R "$USER" /opt/example-sdk-call-flutter
+cd /opt/example-sdk-call-flutter/server
+```
+
+**2. Cấu hình** — key để ngoài thư mục code, `.env` trỏ đường dẫn tuyệt đối:
+
+```sh
+sudo mkdir -p /etc/zenify-push && sudo cp AuthKey_XXXXXXXXXX.p8 firebase-service-account.json /etc/zenify-push/
+cp .env.example .env
+# .env:
+#   APN_KEY_FILE=/etc/zenify-push/AuthKey_XXXXXXXXXX.p8
+#   FCM_SERVICE_ACCOUNT_FILE=/etc/zenify-push/firebase-service-account.json
+#   WEBHOOK_AUTH_KEY=<Authen Key>    ← trùng ô Authen Key trên web Zenify
+#   (uuid webhook tự tạo lần chạy đầu, lưu ở server/data/webhook-tokens — xem log)
+chmod 600 .env
+```
+
+**3. Chạy thử**
+
+```sh
+npm start                            # = node server.mjs, nghe 127.0.0.1:3000
+curl -s localhost:3000/health        # {"ok": true}
+```
+
+**4. Chạy nền, tự khởi động lại** — systemd (`/etc/systemd/system/zenify-push.service`):
+
+```ini
+[Unit]
+Description=Zenify push webhook
+After=network-online.target
+
+[Service]
+WorkingDirectory=/opt/example-sdk-call-flutter/server
+ExecStart=/usr/bin/node server.mjs
+Environment=HOST=127.0.0.1 PORT=3000
+Restart=always
+User=www-data
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```sh
+sudo systemctl daemon-reload && sudo systemctl enable --now zenify-push
+journalctl -u zenify-push -f         # log: URL webhook lúc khởi động + kết quả bắn push
+```
+
+User chạy service (`www-data` ở trên) phải đọc được `.env` và key, và **ghi được** `server/data/`
+(uuid webhook tự tạo): `sudo mkdir -p data && sudo chown www-data data`. Không dùng systemd thì
+`pm2 start server.mjs --name zenify-push && pm2 save` cũng được.
+
+**5. Mở ra Internet bằng reverse proxy HTTPS** — server vẫn chỉ nghe `127.0.0.1`. Ví dụ Caddy (tự
+cấp chứng chỉ HTTPS):
+
+```text
+push.example.com {
+    reverse_proxy 127.0.0.1:3000
+}
+```
+
+nginx: `location / { proxy_pass http://127.0.0.1:3000; proxy_set_header X-Forwarded-For $remote_addr; }`
+trong khối `server` có HTTPS.
+
+Rồi trên web Zenify trỏ webhook tới `https://push.example.com/<uuid>`; xem request ở
+`https://push.example.com/view/<uuid>`.
+
+**Cập nhật code:** `git pull && sudo systemctl restart zenify-push`. Lịch sử ở `/view/<uuid>` nằm
+trong bộ nhớ nên mất sau mỗi lần khởi động lại.
 
 ## Lấy token
 

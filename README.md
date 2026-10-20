@@ -90,14 +90,13 @@ mật (`.env`, key APNs `.p8`, service account Firebase) **không** nằm trong 
 ```sh
 cd server
 cp .env.example .env                       # điền APN_*, FCM_*, WEBHOOK_AUTH_KEY
-node -e "console.log(crypto.randomUUID())" # → uuid; trong .env: WEBHOOK_TOKENS=<uuid>
 mkdir -p secrets && cp AuthKey_XXXXXXXXXX.p8 firebase-service-account.json secrets/
 # trong .env dùng đường dẫn TRONG container:
 #   APN_KEY_FILE=/secrets/AuthKey_XXXXXXXXXX.p8
 #   FCM_SERVICE_ACCOUNT_FILE=/secrets/firebase-service-account.json
 
 docker compose up -d --build               # webhook /<uuid> + POST /push, cổng 3000
-docker compose logs -f                     # xem kết quả bắn push
+docker compose logs -f                     # URL webhook (uuid tự tạo lần đầu, giữ qua deploy) + kết quả bắn push
 curl -s localhost:3000/health              # {"ok": true}
 docker compose down                        # dừng
 ```
@@ -106,10 +105,16 @@ docker compose down                        # dừng
 - Xem request đã nhận + kết quả bắn push: `https://<domain>/view/<uuid>`.
 - Cổng 3000 chỉ mở trên `127.0.0.1` của máy chủ — server Zenify phải gọi tới được nên đặt sau
   reverse proxy HTTPS. uuid là "mật khẩu" của URL: đừng chia sẻ.
+- Xem request Zenify gửi tới + kết quả bắn push: mở `http://localhost:3000/view/<uuid>` (hoặc
+  `https://<domain>/view/<uuid>`) — hướng dẫn đọc trang ở
+  [`server/README.md`](server/README.md#xem-giao-diện-webhook).
 - Chi tiết (đường dẫn, `docker run`, biến môi trường): xem
   [`server/README.md`](server/README.md#chạy-bằng-docker).
-- Chưa có Docker: chạy & test thẳng bằng Node (`WEBHOOK_TOKENS=<uuid> npm start`), kể cả kiểm tra key
-  APNs / FCM bằng token giả — xem [`server/README.md`](server/README.md#chạy--test-ở-máy-không-cần-docker).
+- Không dùng Docker:
+  - chạy & test ở máy bằng Node (`npm start`), kể cả kiểm tra key APNs / FCM
+    bằng token giả — [`server/README.md`](server/README.md#chạy--test-ở-máy-không-cần-docker);
+  - chạy trên máy chủ bằng Node + systemd + reverse proxy HTTPS —
+    [`server/README.md`](server/README.md#chạy-trên-máy-chủ-không-dùng-docker).
 
 ## Đổi version (1.0.x)
 

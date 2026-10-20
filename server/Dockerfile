@@ -7,6 +7,8 @@ FROM node:22-alpine
 
 WORKDIR /app
 COPY package.json *.mjs ./
+# uuid webhook tự tạo lưu ở đây — docker-compose gắn volume để tạo lại container không mất
+RUN mkdir -p /app/data && chown node:node /app/data
 
 ENV NODE_ENV=production \
     # trong container phải nghe 0.0.0.0 mới publish cổng ra ngoài được (server.mjs mặc định

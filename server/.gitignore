@@ -5,3 +5,5 @@ body.json
 secrets/
 node_modules/
 !.env.example
+# uuid webhook tự tạo (server.mjs) — là "mật khẩu" của URL
+data/

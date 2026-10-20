@@ -1,5 +1,5 @@
 # docker compose up -d --build
-# Cần trước: .env (chép .env.example) — WEBHOOK_TOKENS (uuid webhook) + key trong ./secrets/,
+# Cần trước: .env (chép .env.example) + key trong ./secrets/ (WEBHOOK_TOKENS để trống thì tự tạo),
 # trong .env trỏ đường dẫn TRONG container:
 #   APN_KEY_FILE=/secrets/AuthKey_XXXXXXXXXX.p8, FCM_SERVICE_ACCOUNT_FILE=/secrets/xxx.json
 services:
@@ -10,7 +10,12 @@ services:
     env_file: .env
     volumes:
       - ./secrets:/secrets:ro
+      # uuid webhook tự tạo (WEBHOOK_TOKENS để trống) — giữ qua các lần deploy lại
+      - data:/app/data
     ports:
       # chỉ mở trên máy chủ; ra Internet (để server Zenify gọi tới) thì đặt sau reverse proxy HTTPS
       - "127.0.0.1:${SERVER_PORT:-3000}:3000"
     restart: unless-stopped
+
+volumes:
+  data:

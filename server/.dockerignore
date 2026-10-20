@@ -4,6 +4,7 @@ secrets/
 *.p8
 *service-account*.json
 body.json
+data/
 node_modules/
 Dockerfile
 docker-compose.yml
