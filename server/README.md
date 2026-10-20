@@ -316,10 +316,15 @@ docker run -d --name zenify-push --env-file .env \
   -v zenify-push-data:/app/data -p 127.0.0.1:3000:3000 zenify-push
 ```
 
-Lỗi `ENOENT: no such file or directory, open '…AuthKey_….p8'` khi chạy Docker: file trong `.env`
-không có trên máy chủ (hoặc `.env` đang ghi đường dẫn trong container kiểu `/secrets/…` của bản cũ)
-— sửa `APN_KEY_FILE` / `FCM_SERVICE_ACCOUNT_FILE` thành đường dẫn file **trên máy chủ** rồi
-`docker compose up -d`.
+Lỗi đường dẫn file key khi chạy Docker:
+
+| Lỗi | Nguyên nhân | Sửa |
+| --- | --- | --- |
+| `bind source path does not exist: …` (lúc `docker compose up`) | File trong `APN_KEY_FILE` / `FCM_SERVICE_ACCOUNT_FILE` không có trên máy chủ | Chép file lên máy chủ hoặc sửa `.env` thành đường dẫn file **trên máy chủ** |
+| `ENOENT … AuthKey_….p8` | `.env` ghi đường dẫn trong container kiểu `/secrets/…` (bản cũ) hoặc đường dẫn của máy khác | Như trên |
+| `EISDIR: illegal operation on a directory` | Bản compose cũ: đường dẫn không có trên máy chủ → Docker tự tạo **thư mục** rỗng ở đó rồi mount vào | `git pull` bản mới, sửa `.env`, **xoá thư mục rỗng** Docker đã tạo (`sudo rmdir <đường dẫn>`) rồi `docker compose up -d` |
+
+Log lúc khởi động cũng cảnh báo `⚠ APN_KEY_FILE: … là THƯ MỤC` / `KHÔNG có file …` khi gặp các ca này.
 
 * Container nghe `0.0.0.0` (đặt sẵn `HOST`), cổng chỉ publish ra `127.0.0.1` của máy chủ (đổi cổng:
   `SERVER_PORT`). Server Zenify phải gọi tới được → đặt sau reverse proxy HTTPS, và **nên** đặt

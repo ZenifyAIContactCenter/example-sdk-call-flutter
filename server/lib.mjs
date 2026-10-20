@@ -29,6 +29,10 @@ export function checkKeyFiles() {
     const p = keyPath(name);
     if (!p) out.push(`${name} chưa đặt (${name === 'APN_KEY_FILE' ? 'không bắn được iOS' : 'không bắn được Android'})`);
     else if (!fs.existsSync(p)) out.push(`${name}: KHÔNG có file ${p} — chép file vào đó hoặc sửa đường dẫn trong .env`);
+    else if (fs.statSync(p).isDirectory()) {
+      // Docker: đường dẫn trong .env không có trên máy chủ → Docker tự tạo THƯ MỤC rỗng rồi mount vào
+      out.push(`${name}: ${p} là THƯ MỤC, không phải file — đường dẫn trong .env không có trên máy chủ (Docker đã tự tạo thư mục rỗng); sửa .env thành đường dẫn file thật`);
+    }
   }
   return out;
 }
