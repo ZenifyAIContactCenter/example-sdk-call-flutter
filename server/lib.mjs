@@ -33,13 +33,24 @@ function listKeys(ext) {
   }
 }
 
-const isServiceAccount = (p) => {
+// bỏ BOM đầu file (file lưu từ Windows) — JSON.parse không chịu BOM
+const readJson = (p) => JSON.parse(fs.readFileSync(p, 'utf8').replace(/^\uFEFF/, ''));
+
+/** Vì sao file .json KHÔNG phải service account dùng được — '' nếu dùng được */
+function serviceAccountProblem(p) {
+  let j;
   try {
-    return JSON.parse(fs.readFileSync(p, 'utf8'))?.type === 'service_account';
-  } catch {
-    return false;
+    j = readJson(p);
+  } catch (e) {
+    if (e.code === 'EACCES') return 'không có quyền đọc (chown/chmod cho user chạy server)';
+    return `không phải JSON hợp lệ (${e.message})`;
   }
-};
+  if (j?.type === 'service_account') return '';
+  if (j?.project_info || j?.client) return 'là google-services.json (cấu hình app), cần file service account';
+  return `"type" là ${JSON.stringify(j?.type ?? null)}, cần "service_account"`;
+}
+
+const isServiceAccount = (p) => !serviceAccountProblem(p);
 
 const findKeys = (name) =>
   name === 'APN_KEY_FILE' ? listKeys('.p8') : listKeys('.json').filter(isServiceAccount);
@@ -63,6 +74,9 @@ export function checkKeyFiles() {
     const what = name === 'APN_KEY_FILE' ? 'key APNs .p8 (iOS)' : 'service account Firebase .json (Android)';
     const n = findKeys(name).length;
     if (n === 0) out.push(`chưa có ${what} trong ${KEYS_DIR} — thả file vào đó`);
+    // có file .json nhưng bị loại → nói rõ từng file vì sao
+    if (n === 0 && name === 'FCM_SERVICE_ACCOUNT_FILE')
+      for (const p of listKeys('.json')) out.push(`  bỏ qua ${path.basename(p)}: ${serviceAccountProblem(p)}`);
     else if (n > 1) out.push(`có ${n} file ${what} trong ${KEYS_DIR} — chỉ để MỘT`);
   }
   // .p8 không parse được nội dung để lọc như JSON → kiểm tra quyền đọc riêng
@@ -163,7 +177,7 @@ async function fcmAuth() {
   }
   const now = Math.floor(Date.now() / 1000);
   if (fcmCache.token && now < fcmCache.exp - 60) return fcmCache;
-  const sa = JSON.parse(fs.readFileSync(keyPath('FCM_SERVICE_ACCOUNT_FILE'), 'utf8'));
+  const sa = readJson(keyPath('FCM_SERVICE_ACCOUNT_FILE'));
   const head = b64url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
   const claim = b64url(
     JSON.stringify({
