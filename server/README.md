@@ -279,21 +279,24 @@ Xem các request vừa gửi + kết quả bắn push: mở `http://localhost:30
 | `skipped: "duplicate"` | Event lặp đã bắn thành công trước đó (gửi lỗi thì không tính, gửi lại được) |
 | `apns_status` / `fcm_status` khác 200 | Xem "Đọc kết quả APNs" bên dưới |
 
-Docker chỉ thêm phần build image, đọc `.env` qua `env_file` và mount `./secrets` — test bằng mục
+Docker chỉ thêm phần build image, đọc `.env` qua `env_file` và mount 2 file key — test bằng mục
 dưới khi máy có Docker (macOS: Docker Desktop, hoặc `brew install colima docker docker-compose && colima start`).
 
 ## Chạy bằng Docker
 
 Image chỉ chứa code (Node 22, không cần `npm install`). Bí mật **không** nằm trong image
-(`.dockerignore` chặn `.env`, `secrets/`, `*.p8`): biến truyền qua `.env`, key mount vào
-`/secrets` lúc chạy.
+(`.dockerignore` chặn `.env`, `secrets/`, `*.p8`): biến truyền qua `.env`, 2 file key được mount
+(chỉ đọc) lúc chạy.
+
+**Dùng chung `.env` với lúc chạy bằng Node**: `APN_KEY_FILE` / `FCM_SERVICE_ACCOUNT_FILE` ghi đường
+dẫn file trên **máy chủ** (tuyệt đối, hoặc tương đối từ thư mục `server/`, vd `secrets/AuthKey_….p8`).
+`docker-compose.yml` tự mount đúng 2 file đó vào `/keys` trong container và trỏ biến vào đó —
+**không** ghi đường dẫn trong container vào `.env`.
 
 ```sh
 cp .env.example .env                 # điền APN_*, FCM_*, WEBHOOK_AUTH_KEY (uuid webhook tự tạo)
-mkdir -p secrets && cp AuthKey_XXXXXXXXXX.p8 firebase-service-account.json secrets/
-# trong .env trỏ đường dẫn TRONG container:
-#   APN_KEY_FILE=/secrets/AuthKey_XXXXXXXXXX.p8
-#   FCM_SERVICE_ACCOUNT_FILE=/secrets/firebase-service-account.json
+#   APN_KEY_FILE=/etc/zenify-push/AuthKey_XXXXXXXXXX.p8          ← đường dẫn trên máy chủ
+#   FCM_SERVICE_ACCOUNT_FILE=/etc/zenify-push/firebase-service-account.json
 
 docker compose up -d --build         # một service: webhook /<uuid> + POST /push, cổng 3000
 docker compose logs -f               # URL webhook (uuid tự tạo, lưu ở volume data) + kết quả bắn push
@@ -307,9 +310,16 @@ Không dùng compose:
 
 ```sh
 docker build -t zenify-push .
-docker run -d --name zenify-push --env-file .env -v "$PWD/secrets:/secrets:ro" \
-  -p 127.0.0.1:3000:3000 zenify-push
+docker run -d --name zenify-push --env-file .env \
+  -v /etc/zenify-push/AuthKey_XXXXXXXXXX.p8:/keys/apns.p8:ro -e APN_KEY_FILE=/keys/apns.p8 \
+  -v /etc/zenify-push/firebase-service-account.json:/keys/fcm.json:ro -e FCM_SERVICE_ACCOUNT_FILE=/keys/fcm.json \
+  -v zenify-push-data:/app/data -p 127.0.0.1:3000:3000 zenify-push
 ```
+
+Lỗi `ENOENT: no such file or directory, open '…AuthKey_….p8'` khi chạy Docker: file trong `.env`
+không có trên máy chủ (hoặc `.env` đang ghi đường dẫn trong container kiểu `/secrets/…` của bản cũ)
+— sửa `APN_KEY_FILE` / `FCM_SERVICE_ACCOUNT_FILE` thành đường dẫn file **trên máy chủ** rồi
+`docker compose up -d`.
 
 * Container nghe `0.0.0.0` (đặt sẵn `HOST`), cổng chỉ publish ra `127.0.0.1` của máy chủ (đổi cổng:
   `SERVER_PORT`). Server Zenify phải gọi tới được → đặt sau reverse proxy HTTPS, và **nên** đặt

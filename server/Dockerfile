@@ -2,7 +2,8 @@
 # Node ≥ 20.12: lib.mjs dùng process.loadEnvFile.
 #
 # KHÔNG đưa bí mật vào image (.env, key .p8, service account — .dockerignore đã chặn):
-# truyền biến bằng --env-file và mount key vào /secrets lúc chạy. Xem README "Chạy bằng Docker".
+# truyền biến bằng --env-file và mount 2 file key lúc chạy (docker-compose.yml tự làm từ .env).
+# Xem README "Chạy bằng Docker".
 FROM node:22-alpine
 
 WORKDIR /app

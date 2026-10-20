@@ -18,7 +18,7 @@ bắn push cuộc gọi (APNs VoIP cho iOS, FCM cho Android) đúng payload SDK 
 
 ## Phiên bản SDK
 
-`pubspec.yaml` lấy `zenify_call` từ pub.dev (`^0.1.1`). Nâng SDK: `flutter pub upgrade zenify_call`.
+`pubspec.yaml` lấy `zenify_call` từ pub.dev (`^0.1.3`). Nâng SDK: `flutter pub upgrade zenify_call`.
 
 Thử bản SDK đang sửa ở máy (repo `sdk-call-flutter` nằm cạnh repo này) mà không sửa `pubspec.yaml`:
 tạo `pubspec_overrides.yaml` (đã nằm trong `.gitignore`):
@@ -90,10 +90,8 @@ mật (`.env`, key APNs `.p8`, service account Firebase) **không** nằm trong 
 ```sh
 cd server
 cp .env.example .env                       # điền APN_*, FCM_*, WEBHOOK_AUTH_KEY
-mkdir -p secrets && cp AuthKey_XXXXXXXXXX.p8 firebase-service-account.json secrets/
-# trong .env dùng đường dẫn TRONG container:
-#   APN_KEY_FILE=/secrets/AuthKey_XXXXXXXXXX.p8
-#   FCM_SERVICE_ACCOUNT_FILE=/secrets/firebase-service-account.json
+# APN_KEY_FILE / FCM_SERVICE_ACCOUNT_FILE: đường dẫn file key TRÊN MÁY CHỦ (dùng chung khi chạy
+# bằng Node) — docker-compose.yml tự mount 2 file đó vào container
 
 docker compose up -d --build               # webhook /<uuid> + POST /push, cổng 3000
 docker compose logs -f                     # URL webhook (uuid tự tạo lần đầu, giữ qua deploy) + kết quả bắn push

@@ -20,7 +20,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
-import { alreadyFired, forgetFired, handlePush, short } from './lib.mjs';
+import { alreadyFired, checkKeyFiles, forgetFired, handlePush, short } from './lib.mjs';
 
 const PORT = Number(process.env.PORT || 3000);
 // Mặc định chỉ nghe trên máy này: server cầm key APNs, không mở ra mạng ngoài
@@ -286,6 +286,7 @@ http
   })
   .listen(PORT, HOST, () => {
     console.log(`push server: http://${HOST}:${PORT}/push${AUTH_KEY ? ` (kiểm tra Authen Key ở header ${AUTH_HEADER})` : ''}`);
+    for (const w of checkKeyFiles()) console.warn(`⚠ ${w}`);
     console.log(`webhook uuid (${tokenSource}):`);
     for (const t of TOKENS) {
       console.log(`webhook: http://${HOST}:${PORT}/${t}   (xem: /view/${t})`);

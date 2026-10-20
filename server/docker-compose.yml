@@ -1,15 +1,21 @@
 # docker compose up -d --build
-# Cần trước: .env (chép .env.example) + key trong ./secrets/ (WEBHOOK_TOKENS để trống thì tự tạo),
-# trong .env trỏ đường dẫn TRONG container:
-#   APN_KEY_FILE=/secrets/AuthKey_XXXXXXXXXX.p8, FCM_SERVICE_ACCOUNT_FILE=/secrets/xxx.json
+# Cần trước: .env (chép .env.example). Dùng CHUNG .env với lúc chạy bằng Node: APN_KEY_FILE /
+# FCM_SERVICE_ACCOUNT_FILE ghi đường dẫn trên MÁY CHỦ (tuyệt đối, hoặc tương đối từ thư mục
+# server/) — compose tự mount đúng file đó vào container. WEBHOOK_TOKENS để trống thì tự tạo.
 services:
   # MỘT tiến trình: nhận webhook ở /<uuid> (web Zenify trỏ tới) → bắn push ngay; xem ở /view/<uuid>
   server:
     build: .
     image: zenify-push
     env_file: .env
+    environment:
+      # đường dẫn TRONG container của 2 file key mount bên dưới (ghi đè giá trị trong .env)
+      - APN_KEY_FILE=/keys/apns.p8
+      - FCM_SERVICE_ACCOUNT_FILE=/keys/firebase-service-account.json
     volumes:
-      - ./secrets:/secrets:ro
+      # file key trên máy chủ (lấy từ .env) → /keys trong container, chỉ đọc
+      - ${APN_KEY_FILE:?đặt APN_KEY_FILE trong .env (đường dẫn file .p8 trên máy chủ)}:/keys/apns.p8:ro
+      - ${FCM_SERVICE_ACCOUNT_FILE:?đặt FCM_SERVICE_ACCOUNT_FILE trong .env (file JSON Firebase trên máy chủ)}:/keys/firebase-service-account.json:ro
       # uuid webhook tự tạo (WEBHOOK_TOKENS để trống) — giữ qua các lần deploy lại
       - data:/app/data
     ports:

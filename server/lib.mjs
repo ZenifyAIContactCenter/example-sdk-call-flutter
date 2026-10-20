@@ -13,6 +13,26 @@ const env = (k, def) => process.env[k] || def;
 const b64url = (buf) => Buffer.from(buf).toString('base64url');
 export const short = (t) => `${String(t).slice(0, 8)}…${String(t).slice(-6)}`;
 
+/**
+ * Đường dẫn file key trong biến môi trường. Tương đối → tính theo thư mục server/ (nơi có .env),
+ * KHÔNG theo thư mục đang đứng khi chạy lệnh — trước đây chạy từ thư mục khác là ENOENT.
+ */
+export function keyPath(name) {
+  const v = process.env[name];
+  return v ? path.resolve(DIR, v) : '';
+}
+
+/** Kiểm tra file key lúc khởi động → báo rõ thay vì lỗi ENOENT ở lần bắn push đầu tiên. */
+export function checkKeyFiles() {
+  const out = [];
+  for (const name of ['APN_KEY_FILE', 'FCM_SERVICE_ACCOUNT_FILE']) {
+    const p = keyPath(name);
+    if (!p) out.push(`${name} chưa đặt (${name === 'APN_KEY_FILE' ? 'không bắn được iOS' : 'không bắn được Android'})`);
+    else if (!fs.existsSync(p)) out.push(`${name}: KHÔNG có file ${p} — chép file vào đó hoặc sửa đường dẫn trong .env`);
+  }
+  return out;
+}
+
 export function missingEnv(...keys) {
   return keys.filter((k) => !process.env[k]);
 }
@@ -32,7 +52,7 @@ let apnsJwtCache = { token: '', at: 0 };
 function apnsJwt() {
   const now = Math.floor(Date.now() / 1000);
   if (apnsJwtCache.token && now - apnsJwtCache.at < 3000) return apnsJwtCache.token;
-  const key = fs.readFileSync(env('APN_KEY_FILE'), 'utf8');
+  const key = fs.readFileSync(keyPath('APN_KEY_FILE'), 'utf8');
   const head = b64url(JSON.stringify({ alg: 'ES256', kid: env('APN_KEY_ID') }));
   const body = b64url(JSON.stringify({ iss: env('APN_TEAM_ID'), iat: now }));
   const sig = crypto.sign('sha256', Buffer.from(`${head}.${body}`), { key, dsaEncoding: 'ieee-p1363' });
@@ -84,7 +104,7 @@ async function fcmAuth() {
   requireEnv('FCM_SERVICE_ACCOUNT_FILE');
   const now = Math.floor(Date.now() / 1000);
   if (fcmCache.token && now < fcmCache.exp - 60) return fcmCache;
-  const sa = JSON.parse(fs.readFileSync(env('FCM_SERVICE_ACCOUNT_FILE'), 'utf8'));
+  const sa = JSON.parse(fs.readFileSync(keyPath('FCM_SERVICE_ACCOUNT_FILE'), 'utf8'));
   const head = b64url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
   const claim = b64url(
     JSON.stringify({
