@@ -6,7 +6,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 
 # Version app (Android versionName+versionCode, iOS CFBundleShortVersionString+CFBundleVersion).
 # Tăng bằng: ./tool/bump_version.sh
-version: 1.0.4+1
+version: 1.0.5+1
 
 environment:
   sdk: ^3.13.5

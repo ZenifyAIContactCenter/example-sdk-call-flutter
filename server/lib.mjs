@@ -141,7 +141,17 @@ export function sendApnsVoip({ token, payload, production = apnsDefaultProductio
   const topic = `${env('APN_BUNDLE_ID', 'com.example.sdk.zenify')}.voip`;
   return new Promise((resolve, reject) => {
     const client = http2.connect(host);
-    client.on('error', reject);
+    // Lỗi kết nối (DNS / TCP / TLS) → báo NGUYÊN NHÂN thật. Không có bước này Node chỉ ném
+    // "The pending stream has been canceled (caused by: )": thử cả IPv4 + IPv6 đều lỗi →
+    // AggregateError không có message.
+    const fail = (e) => {
+      clearTimeout(timer);
+      client.destroy();
+      reject(connectError(host, e));
+    };
+    const timer = setTimeout(() => fail(Object.assign(new Error('quá 10s chưa kết nối được'), { code: 'ETIMEDOUT' })), 10000);
+    client.on('connect', () => clearTimeout(timer));
+    client.on('error', fail);
     const req = client.request({
       ':method': 'POST',
       ':path': `/3/device/${token}`,
@@ -160,12 +170,24 @@ export function sendApnsVoip({ token, payload, production = apnsDefaultProductio
     req.setEncoding('utf8');
     req.on('data', (c) => (res.body += c));
     req.on('end', () => {
+      clearTimeout(timer);
       client.close();
       resolve(res);
     });
-    req.on('error', reject);
+    req.on('error', (e) => fail(e.cause ?? e));
     req.end(JSON.stringify(payload));
   });
+}
+
+/** Lỗi kết nối APNs → câu dễ hiểu: mã lỗi + từng địa chỉ đã thử (IPv4 / IPv6). */
+function connectError(host, e) {
+  const parts = (e?.errors?.length ? e.errors : [e]).map(
+    (x) => `${x?.code ?? x?.name ?? 'ERR'}${x?.address ? ` ${x.address}:${x.port}` : ''}${x?.message && !x?.address ? ` ${x.message}` : ''}`,
+  );
+  return new Error(
+    `Không kết nối được ${host} (${parts.join(' | ')}) — máy chủ chặn đi ra cổng 443 tới Apple ` +
+      `(firewall / security group / mạng Docker) hoặc lỗi DNS. Kiểm tra: curl -v https://api.push.apple.com`,
+  );
 }
 
 // ---------------- FCM HTTP v1 ----------------
