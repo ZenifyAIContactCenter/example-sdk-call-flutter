@@ -6,7 +6,8 @@
 //   4. xin quyền (micro / thông báo / full-screen)
 //   5. chọn đầu số gọi ra (CalloutQueuePicker trên AppBar) + toast lỗi cuộc gọi (CallErrorToaster)
 //   6. ZenifyCallOverlay tự hiện màn cuộc gọi đến / đi; đăng nhập xong vào DemoHome
-//      (demo_home.dart): tab CRM click-to-call + tab Gọi thủ công chọn theme màn cuộc gọi
+//      (demo_home.dart): tab Dashboard (số liệu hôm nay — dashboard_tab.dart) + tab CRM
+//      click-to-call + tab Gọi thủ công chọn theme màn cuộc gọi
 //   7. signOut(): xoá token + phone_type=0 TRƯỚC, rồi huỷ SIP + xoá phiên đã lưu → màn đăng nhập
 // Email + API key truyền lúc chạy (không ghi vào code); mật khẩu SIP lấy từ
 // /auth/sdk/sign-in. Đăng nhập thành công → demo nhớ email + key (Keychain/Keystore) nên

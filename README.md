@@ -2,7 +2,8 @@
 
 App Flutter demo dùng SDK gọi điện [`zenify_call`](https://pub.dev/packages/zenify_call) **từ pub.dev**:
 đăng nhập bằng email + API key, nhận / gọi cuộc gọi qua PJSIP, nhận push VoIP / FCM khi app ở nền
-hoặc đã tắt. Sau khi đăng nhập có 2 tab mô phỏng app CRM tích hợp SDK:
+hoặc đã tắt. Sau khi đăng nhập có 3 tab mô phỏng app CRM tích hợp SDK:
+- **Dashboard**: trạng thái agent + số liệu cuộc gọi hôm nay (xem [Dashboard](#dashboard)).
 - **CRM**: danh sách khách cần liên hệ, bấm 📞 là gọi (click-to-call).
 - **Gọi**: nhập số / extension, chọn theme màn cuộc gọi → mở màn quay số SDK điền sẵn số.
 
@@ -11,7 +12,7 @@ bắn push cuộc gọi (APNs VoIP cho iOS, FCM cho Android) đúng payload SDK 
 
 | Thư mục | Nội dung |
 | --- | --- |
-| `lib/` | App demo (`main.dart`: luồng đăng nhập → gọi; `demo_home.dart`: tab CRM / Gọi) |
+| `lib/` | App demo (`main.dart`: luồng đăng nhập → gọi; `demo_home.dart`: tab Dashboard / CRM / Gọi; `dashboard_tab.dart`: tab Dashboard; `dashboard_preview.dart`: xem Dashboard không cần đăng nhập) |
 | `server/` | Server push mẫu (Node.js ≥ 18, không cần `npm install`; chạy được bằng Docker) |
 | `docs/images/` | Ảnh hướng dẫn: webhook trên web Zenify, key APNs, Firebase |
 | `tool/` | `bump_version.sh`, `gen_firebase_options.py` |
@@ -66,6 +67,10 @@ cp dart_defines.example.json dart_defines.local.json   # điền ZC_EMAIL, ZC_AP
 | `ZC_AUTO` | `true` = tự đăng nhập + tự nghe cuộc gọi đến (kiểm thử) |
 | `ZC_DEMO_PHONE` | Số gọi thử ở màn CRM / Gọi thủ công (mặc định `0900000000`) |
 | `ZC_DEMO_CUSTOMERS` | Danh sách khách màn CRM — chuỗi JSON `[{name, phone, tag, note, history}]` (mặc định dữ liệu mẫu) |
+| `ZC_DEMO_TARGET` | Dashboard: chỉ tiêu cuộc gọi / ngày (mặc định `40`) |
+| `ZC_DEMO_SHIFT` / `ZC_DEMO_CENTER` | Dashboard: ca làm (`08:30 - 17:30`) / tên trung tâm (`M-Call Center`) |
+| `ZC_DEMO_LEADS` | Dashboard: số lịch hẹn đã chốt hôm nay (mặc định `5`) |
+| `ZC_DEMO_CAMPAIGN` / `ZC_DEMO_CAMPAIGN_DESC` / `ZC_DEMO_CAMPAIGN_DONE` / `ZC_DEMO_CAMPAIGN_TOTAL` | Dashboard: thẻ chiến dịch (tên, mô tả, đã gọi / tổng khách) |
 
 Lệnh chạy / build nào cũng phải kèm `--dart-define-from-file=dart_defines.local.json`, vì các giá trị
 này được đóng vào app lúc build.
@@ -80,6 +85,31 @@ flutter run --profile --dart-define-from-file=dart_defines.local.json  # profile
 > **Test cuộc gọi đến / push: dùng profile hoặc release.** Từ iOS 14, bản debug không chạy được khi
 > không gắn với `flutter run` / Xcode. Push đánh thức app trong nền thì app chết, server đổi
 > `phone_type` về 0, nên chỉ nhận được cuộc gọi đầu.
+
+## Dashboard
+
+Tab đầu tiên sau đăng nhập (`lib/dashboard_tab.dart`), tự tải lại mỗi 20s, kéo xuống để tải ngay.
+
+| Phần | Nguồn |
+| --- | --- |
+| Thẻ agent: tên · Ext, ON DUTY / OFFLINE | `account` + SIP đã REGISTER + `getAgentStatus()` (`working_status`) |
+| Tổng cuộc gọi, Tỷ lệ nghe máy | `getCallDailyStats()` → `GET /v2/report/call-daily` (như web "Hoạt động trong ngày") |
+| Thời gian thoại (tổng + TB/cuộc) | cộng `duration` các cuộc đã nghe trong `getCallHistory()` từ 0:00 hôm nay |
+| Cuộc gọi vào / ra, Predictive | `getCallDailyStats()` |
+| Kênh tương tác, Hàng đợi, Đang đổ chuông / Đang nói | `getMonitorStats()` → `GET /v2/monitor/call` |
+| Chỉ tiêu, Ca làm, Chốt lịch hẹn, Chiến dịch | **Zenify chưa có API** — demo đọc `ZC_DEMO_*` (bảng trên); app thật lấy từ CRM / backend riêng |
+
+Agent chỉ thấy số của mình (SDK tự lọc theo `agent_id`). Nút **Gọi khách hàng tiếp theo** gọi lần lượt
+khách trong danh sách CRM (`ZC_DEMO_CUSTOMERS`).
+
+Xem giao diện không cần đăng nhập (số liệu giả theo response thật của API):
+
+```sh
+flutter run -t lib/dashboard_preview.dart
+```
+
+> Hai method thống kê có từ bản SDK sau `0.1.3` — trước khi bản đó lên pub.dev, chạy bằng SDK ở máy
+> (`pubspec_overrides.yaml`, xem [Phiên bản SDK](#phiên-bản-sdk)).
 
 ## Chạy server push mẫu bằng Docker
 

@@ -1,4 +1,5 @@
 // Màn chính sau đăng nhập — mô phỏng app CRM của khách tích hợp SDK:
+//   · Dashboard: số liệu cuộc gọi / kênh / hàng đợi hôm nay (dashboard_tab.dart)
 //   · CRM: danh sách khách cần liên hệ, bấm 📞 = click-to-call (makeCall + tên khách)
 //   · Gọi: nhập số / extension + chọn theme → mở màn quay số SDK điền sẵn số đó
 // Header: trạng thái SIP (Online / Offline) + extension (= agent_id) + nút đăng xuất.
@@ -8,6 +9,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:zenify_call/zenify_call.dart';
 
+import 'dashboard_tab.dart';
 import 'main.dart' show customDial;
 
 /// Số test cho demo (`--dart-define=ZC_DEMO_PHONE=…`) — mọi khách trong danh sách đều gọi về số này.
@@ -115,6 +117,9 @@ class DemoHome extends StatefulWidget {
 class _DemoHomeState extends State<DemoHome> {
   final _sdk = ZenifyCall.instance;
   int _tab = 0;
+
+  /// Khách tiếp theo cho nút "Gọi khách hàng tiếp theo" (Dashboard) — xoay vòng danh sách CRM.
+  int _next = 0;
   bool _online = false;
   StreamSubscription<RegistrationState>? _reg;
 
@@ -151,7 +156,18 @@ class _DemoHomeState extends State<DemoHome> {
 
   @override
   Widget build(BuildContext context) {
-    final tabs = [_CrmTab(onCall: _call), const _ManualDialTab()];
+    final tabs = [
+      DashboardTab(
+        account: widget.account,
+        online: _online,
+        onCallNext: () {
+          final c = _customers[_next++ % _customers.length];
+          _call(c.phone, name: c.name);
+        },
+      ),
+      _CrmTab(onCall: _call),
+      const _ManualDialTab(),
+    ];
     return Theme(
       data: Theme.of(context).copyWith(
         colorScheme: ColorScheme.fromSeed(seedColor: _teal, primary: _teal, surface: _bg),
@@ -161,8 +177,9 @@ class _DemoHomeState extends State<DemoHome> {
         appBar: AppBar(
           backgroundColor: _bg,
           surfaceTintColor: Colors.transparent,
+          centerTitle: false,
           titleSpacing: 20,
-          title: Text(_tab == 0 ? 'CRM' : 'Gọi thủ công', style: const TextStyle(fontSize: 26)),
+          title: Text(const ['Dashboard', 'CRM', 'Gọi thủ công'][_tab], style: const TextStyle(fontSize: 26)),
           actions: [
             _StatusChip(online: _online, extension: widget.account.agentId),
             IconButton(
@@ -180,8 +197,10 @@ class _DemoHomeState extends State<DemoHome> {
           selectedIndex: _tab,
           onDestinationSelected: (i) => setState(() => _tab = i),
           indicatorColor: _mint,
+          labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
           backgroundColor: const Color(0xFFE6ECEA),
           destinations: const [
+            NavigationDestination(icon: Icon(Icons.space_dashboard), label: 'Dashboard'),
             NavigationDestination(icon: Icon(Icons.groups), label: 'CRM'),
             NavigationDestination(icon: Icon(Icons.dialpad), label: 'Gọi'),
           ],

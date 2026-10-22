@@ -615,10 +615,9 @@ packages:
   zenify_call:
     dependency: "direct main"
     description:
-      name: zenify_call
-      sha256: ef6e20be39f402438f115f9edf74fc38f6118f8966904890761937b124f428f7
-      url: "https://pub.dev"
-    source: hosted
+      path: "../sdk-call-flutter/packages/zenify_call"
+      relative: true
+    source: path
     version: "0.1.3"
 sdks:
   dart: ">=3.13.5 <4.0.0"
