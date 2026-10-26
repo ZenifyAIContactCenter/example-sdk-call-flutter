@@ -6,22 +6,25 @@ import flutter_callkit_incoming
 import zenify_call
 
 /// Tích hợp zenify_call — đây chính là mẫu app tiêu thụ cần chép (README):
-///  · ZenifyCallKit.shared.start() sớm nhất có thể (PushKit giao push ngay khi đăng ký)
+///  · Đăng ký plugin NGAY trong didFinishLaunching, KHÔNG dùng FlutterImplicitEngineDelegate:
+///    implicit engine chỉ đăng ký plugin khi FlutterViewController được tạo (có scene). App đã
+///    tắt hẳn được PushKit mở NỀN thì không có scene → flutter_callkit_incoming không bao giờ
+///    đăng ký → không đổ chuông, màn khoá chỉ hiện cuộc "Không xác định".
+///    register(with: self) tạo engine chạy nền ngay (FlutterLaunchEngine); view controller của
+///    storyboard dùng lại engine đó khi app mở giao diện.
+///  · ZenifyCallKit.shared.start() SAU khi đăng ký plugin (PushKit giao push ngay khi đăng ký)
 ///  · Conform CallkitIncomingAppDelegate và chuyển tiếp sang ZenifyCallKit —
 ///    flutter_callkit_incoming tìm delegate qua UIApplication.shared.delegate
 ///  · Silent APNs CALL_CANCEL → handleRemoteNotification
 @main
-@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate, CallkitIncomingAppDelegate {
+@objc class AppDelegate: FlutterAppDelegate, CallkitIncomingAppDelegate {
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    GeneratedPluginRegistrant.register(with: self)
     ZenifyCallKit.shared.start()
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
-  }
-
-  func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
-    GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
   }
 
   override func application(

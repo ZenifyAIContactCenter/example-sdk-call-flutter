@@ -1,7 +1,7 @@
 # example-call-flutter
 
 App Flutter demo dùng SDK gọi điện [`zenify_call`](https://pub.dev/packages/zenify_call) **từ pub.dev**:
-đăng nhập bằng email + API key, nhận / gọi cuộc gọi qua PJSIP, nhận push VoIP / FCM khi app ở nền
+đăng nhập bằng email + API key, nhận / gọi cuộc gọi (SIP: baresip), nhận push VoIP / FCM khi app ở nền
 hoặc đã tắt. Sau khi đăng nhập có 3 tab mô phỏng app CRM tích hợp SDK:
 - **Dashboard**: trạng thái agent + số liệu cuộc gọi hôm nay (xem [Dashboard](#dashboard)).
 - **CRM**: danh sách khách cần liên hệ, bấm 📞 là gọi (click-to-call).
@@ -19,7 +19,7 @@ bắn push cuộc gọi (APNs VoIP cho iOS, FCM cho Android) đúng payload SDK 
 
 ## Phiên bản SDK
 
-`pubspec.yaml` lấy `zenify_call` từ pub.dev (`^0.1.3`). Nâng SDK: `flutter pub upgrade zenify_call`.
+`pubspec.yaml` lấy `zenify_call` từ pub.dev (`^0.2.0`). Nâng SDK: `flutter pub upgrade zenify_call`.
 
 Thử bản SDK đang sửa ở máy (repo `sdk-call-flutter` nằm cạnh repo này) mà không sửa `pubspec.yaml`:
 tạo `pubspec_overrides.yaml` (đã nằm trong `.gitignore`):
@@ -108,8 +108,7 @@ Xem giao diện không cần đăng nhập (số liệu giả theo response th�
 flutter run -t lib/dashboard_preview.dart
 ```
 
-> Hai method thống kê có từ bản SDK sau `0.1.3` — trước khi bản đó lên pub.dev, chạy bằng SDK ở máy
-> (`pubspec_overrides.yaml`, xem [Phiên bản SDK](#phiên-bản-sdk)).
+> Hai method thống kê có từ `zenify_call` 0.1.4.
 
 ## Chạy server push mẫu bằng Docker
 

@@ -6,7 +6,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 
 # Version app (Android versionName+versionCode, iOS CFBundleShortVersionString+CFBundleVersion).
 # Tăng bằng: ./tool/bump_version.sh
-version: 1.0.5+1
+version: 1.0.8+1
 
 environment:
   sdk: ^3.13.5
@@ -26,7 +26,7 @@ dependencies:
   #   dependency_overrides:
   #     zenify_call:
   #       path: ../sdk-call-flutter/packages/zenify_call
-  zenify_call: ^0.1.3
+  zenify_call: ^0.2.0
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
@@ -52,7 +52,7 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
-  # zenify_call dùng CocoaPods (C++ + PJSIP.xcframework) và phụ thuộc flutter_callkit_incoming
+  # zenify_call dùng CocoaPods (C++ + Baresip.xcframework) và phụ thuộc flutter_callkit_incoming
   # qua pod → SPM phải tắt, nếu không flutter_callkit_incoming bị cài bằng SPM và pod install lỗi.
   config:
     enable-swift-package-manager: false

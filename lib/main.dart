@@ -1,7 +1,7 @@
 // App demo zenify_call — luồng app thật cần làm:
 //   1. Firebase.initializeApp + đưa token FCM cho SDK (updateFcmToken / onTokenRefresh)
-//   2. restoreSession() mỗi lần mở app → SDK gọi lại sign-in, dựng PJSIP, đồng bộ push
-//   3. chưa có phiên → signIn(email, API key) → SDK tự lấy agent, dựng PJSIP,
+//   2. restoreSession() mỗi lần mở app → SDK gọi lại sign-in, dựng SIP, đồng bộ push
+//   3. chưa có phiên → signIn(email, API key) → SDK tự lấy agent, dựng SIP,
 //      phone_type=5 + working_status=AVAILABLE + tự chọn đầu số mặc định
 //   4. xin quyền (micro / thông báo / full-screen)
 //   5. chọn đầu số gọi ra (CalloutQueuePicker trên AppBar) + toast lỗi cuộc gọi (CallErrorToaster)
@@ -105,6 +105,15 @@ class _DemoPageState extends State<DemoPage> {
       ..add(
         _sdk.calls.listen((c) {
           debugPrint('[zenify_call] ${c.error == null ? c : '$c → ${c.error}'}');
+          // Kết thúc: mã SIP + câu status line + header Reason (Q.850 của nhà mạng) + thông báo đã map
+          if (c.type == CallEventType.ended) {
+            final reasons = SipReason.parse(c.sipReason);
+            debugPrint('[demo] KẾT THÚC ${c.direction.name} ${c.number} | SIP ${c.code} "${c.reason}"'
+                ' | Reason: ${c.sipReason.isEmpty ? '(không có)' : c.sipReason}'
+                '${reasons.isEmpty ? '' : ' → ${reasons.map((r) => '${r.protocol} ${r.cause}${r.text == null ? '' : ' "${r.text}"'}').join(', ')}'}'
+                ' | ${c.local ? 'máy này cúp' : 'phía kia / tổng đài kết thúc'}'
+                ' | báo agent: ${c.error ?? '(không báo)'}');
+          }
           // cuộc gọi kết thúc bất thường (603, 480…) → in log SIP để xem INVITE + bản tin lỗi
           if (c.type == CallEventType.ended && !c.local && c.code >= 300) {
             Future<void>.delayed(const Duration(milliseconds: 300), () => _sdk.printSipLog(lines: 300));

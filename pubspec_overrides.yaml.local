@@ -1,0 +1,3 @@
+dependency_overrides:
+  zenify_call:
+    path: ../sdk-call-flutter/packages/zenify_call
