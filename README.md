@@ -19,7 +19,7 @@ bắn push cuộc gọi (APNs VoIP cho iOS, FCM cho Android) đúng payload SDK 
 
 ## Phiên bản SDK
 
-`pubspec.yaml` lấy `zenify_call` từ pub.dev (`^0.2.1`). Nâng SDK: `flutter pub upgrade zenify_call`.
+`pubspec.yaml` lấy `zenify_call` từ pub.dev (`^0.2.2`). Nâng SDK: `flutter pub upgrade zenify_call`.
 
 Thử bản SDK đang sửa ở máy (repo `sdk-call-flutter` nằm cạnh repo này) mà không sửa `pubspec.yaml`:
 tạo `pubspec_overrides.yaml` (đã nằm trong `.gitignore`):
