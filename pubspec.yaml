@@ -26,7 +26,7 @@ dependencies:
   #   dependency_overrides:
   #     zenify_call:
   #       path: ../sdk-call-flutter/packages/zenify_call
-  zenify_call: ^0.2.0
+  zenify_call: ^0.2.1
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
