@@ -640,10 +640,10 @@ packages:
     dependency: "direct main"
     description:
       name: zenify_call
-      sha256: d33f799ba12a78cf5e130e715679116aa9595773643518d024accf155d3e41f0
+      sha256: f8d1b112b647a44541b564b9f43454025acbd4601904faf9db0f42260b73c941
       url: "https://pub.dev"
     source: hosted
-    version: "0.2.7"
+    version: "0.2.8"
 sdks:
   dart: ">=3.13.5 <4.0.0"
   flutter: ">=3.38.4"

@@ -133,14 +133,31 @@ function apnsJwt() {
  * VoIP push: `payload` gửi NGUYÊN VẸN làm body APNs (app đọc các trường ở cấp gốc).
  * @returns {{status:number, apnsId:string, body:string, host:string}}
  */
-export function sendApnsVoip({ token, payload, production = apnsDefaultProduction() }) {
+export async function sendApnsVoip({ token, payload, production = apnsDefaultProduction() }) {
   if (!keyPath('APN_KEY_FILE')) throw new Error(`Chưa có key APNs .p8 — thả MỘT file vào ${KEYS_DIR}`);
   if (!apnKeyId()) throw new Error('Không biết Key ID APNs — tên file AuthKey_<KeyID>.p8 hoặc đặt APN_KEY_ID');
   requireEnv('APN_TEAM_ID');
   const host = production ? 'https://api.push.apple.com' : 'https://api.sandbox.push.apple.com';
   const topic = `${env('APN_BUNDLE_ID', 'com.example.sdk.zenify')}.voip`;
+  // Lỗi KẾT NỐI = push chưa rời máy chủ → gửi lại không sợ trùng. Lỗi từ Apple (có status) thì không.
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await apnsOnce({ host, topic, token, payload });
+    } catch (e) {
+      if (attempt >= APNS_ATTEMPTS) throw e;
+      console.warn(`APNs lần ${attempt} lỗi kết nối, thử lại: ${e.message}`);
+      await new Promise((r) => setTimeout(r, 300 * attempt));
+    }
+  }
+}
+
+const APNS_ATTEMPTS = 3;
+
+function apnsOnce({ host, topic, token, payload }) {
   return new Promise((resolve, reject) => {
-    const client = http2.connect(host);
+    // Node ≥ 20 thử IPv4 / IPv6 song song (happy eyeballs), mặc định chỉ chờ mỗi địa chỉ 250ms →
+    // mạng máy chủ chậm là CẢ HAI hết giờ → "The pending stream has been canceled (caused by: )".
+    const client = http2.connect(host, { autoSelectFamilyAttemptTimeout: 2000 });
     // Lỗi kết nối (DNS / TCP / TLS) → báo NGUYÊN NHÂN thật. Không có bước này Node chỉ ném
     // "The pending stream has been canceled (caused by: )": thử cả IPv4 + IPv6 đều lỗi →
     // AggregateError không có message.
